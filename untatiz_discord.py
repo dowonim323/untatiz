@@ -248,10 +248,10 @@ async def check_update():
                 data = sheet.get_all_values()
                 
                 formatted_data = []
-                for i, row in enumerate(data):
-                    if 1 <= i <= 9:
+                for row in data:
+                    if len(row[0]) == 1:
                         formatted_row = " " + "\t".join(row)
-                    elif i == 11:
+                    elif len(row[0]) == 0:
                         formatted_row = "  " + "\t".join(row)
                     else:
                         formatted_row = "\t".join(row)
