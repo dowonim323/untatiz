@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta
 import pytz
 import gspread
+from gspread_formatting import *
 import os
 import pandas as pd
 import numpy as np
@@ -15,6 +16,8 @@ import requests
 import shutil
 from openpyxl import load_workbook
 import re
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
 
 os.environ['WDM_LOG'] = '0'
 
@@ -671,7 +674,7 @@ def update_games(driver):
     return pd.DataFrame(games)
 
 # 서비스 데이터 업데이트 함수
-def update_service(doc_service, player_id, games):
+def update_service(doc_service, player_name, player_id, live_war, games):
     db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
     db = db.iloc[:, [0, -2, -1]]
     date = db.columns[-1]
@@ -745,6 +748,51 @@ def update_service(doc_service, player_id, games):
 
     doc_service.worksheet("GOAT").update([GOAT.columns.values.tolist()] + GOAT.values.tolist())
     doc_service.worksheet("BOAT").update([BOAT.columns.values.tolist()] + BOAT.values.tolist())
+    
+    draft = pd.DataFrame()
+
+    for i in range(max(len(player_name), len(live_war))):
+        if i < len(player_name):
+            draft = pd.concat([draft, player_name.iloc[[i],0:28]], ignore_index=True)
+        if i < len(live_war):
+            draft = pd.concat([draft, live_war.iloc[[i],0:28]], ignore_index=True)
+
+    draft.index = ["팀 언", "", "팀 앙", "", "팀 삼", "", "팀 준", "", "팀 역", "", "팀 뚝", "", "팀 홍", "", "팀 엉", "", "팀 코", "", "팀 옥", ""]
+
+    draft = draft.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+
+    doc_service.worksheet("드래프트").update([[""] + list(draft.columns)] + [[draft.index[i]] + list(draft.iloc[i]) for i in range(len(draft))])
+
+    df = live_war.iloc[:,0:28]
+
+    z_df = df.copy()
+
+    for column in df.columns:
+        col_mean = df[column].mean()
+        col_std = df[column].std()
+        z_df[column] = (df[column] - col_mean) / col_std
+
+    norm = Normalize(vmin=-3, vmax=3)
+    sm = ScalarMappable(cmap='coolwarm', norm=norm)
+
+    colored_df = z_df.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
+    colored_df = colored_df.map(lambda x: [color / 255 for color in x])
+
+    sheet = doc_service.worksheet("드래프트")
+    batch = batch_updater(sheet.spreadsheet)
+
+    for row in range(1, 11):
+        for col in range(1, 29):
+            col_letter = ""
+            n = col + 1
+            while n > 0:
+                n, remainder = divmod(n - 1, 26)
+                col_letter = chr(65 + remainder) + col_letter
+            cell = f"{col_letter}{2*row+1}"
+            fmt = cellFormat(backgroundColor=color(colored_df.iloc[row-1,col-1][0], colored_df.iloc[row-1,col-1][1], colored_df.iloc[row-1,col-1][2]))
+            batch.format_cell_range(sheet, cell, fmt)
+
+    batch.execute()
 
     kst = pytz.timezone('Asia/Seoul')
     now = str(datetime.now(kst).strftime('%Y-%m-%d %H:%M:%S'))
@@ -910,7 +958,7 @@ while(True):
         pit = load_statiz_pit(driver)
         live_war, current_war = get_war(bat, pit, player_id, player_activation, war_basis)
         update_db(player_name, player_id, current_war, bat, pit)
-        update_service(doc_service, player_id, games)
+        update_service(doc_service, player_name, player_id, live_war, games)
         update_fa(bat, pit, player_id, player_activation, doc_fa)
         backup_db()
         
@@ -918,7 +966,7 @@ while(True):
         
         driver.quit()
         
-        time.sleep(10)
+        time.sleep(60)
         
     except:
         time.sleep(10)
