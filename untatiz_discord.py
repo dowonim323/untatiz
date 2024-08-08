@@ -249,6 +249,9 @@ async def check_update():
                 
                 formatted_data = []
                 for row in data:
+                    if len(row[3]) == 4:
+                        row[3] = " " + row[3]
+                for row in data:
                     if len(row[0]) == 1:
                         formatted_row = " " + "\t".join(row)
                     elif len(row[0]) == 0:
