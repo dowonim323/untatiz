@@ -728,6 +728,8 @@ def update_service(doc_service, player_name, player_id, live_war, games):
     batch = batch_updater(sheet.spreadsheet)
         
     for i in range(db.shape[0]):
+        if db.iloc[i]["팀"] == "퐈":
+            continue
         cell = f"D{i+2}"
         fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
         batch.format_cell_range(sheet, cell, fmt)
