@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta
 import pytz
 import gspread
+from gspread_formatting import color, cellFormat
 from gspread_formatting import *
 import os
 import pandas as pd
@@ -710,6 +711,28 @@ def update_service(doc_service, player_name, player_id, live_war, games):
     db['WAR'] = db.apply(lambda x: f'{x["WAR"]:.2f}', axis=1)
 
     doc_service.worksheet("팀 순위").update([db.columns.values.tolist()] + db.values.tolist())
+    
+    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀")
+
+    mean = np.nanmean(db_diff.values)
+    std = np.nanstd(db_diff.values)
+
+    z_diff = db.set_index("팀")[["변동"]].map(lambda x: (float(x) - mean) / std)
+    norm = Normalize(vmin=-3, vmax=3)
+    sm = ScalarMappable(cmap='coolwarm', norm=norm)
+
+    colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
+    colored_diff = colored_diff.map(lambda x: [color / 255 for color in x])
+
+    sheet = doc_service.worksheet("팀 순위")
+    batch = batch_updater(sheet.spreadsheet)
+        
+    for i in range(db.shape[0]):
+        cell = f"D{i+2}"
+        fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
+        batch.format_cell_range(sheet, cell, fmt)
+        
+    batch.execute()
 
     dfs = []
 
@@ -727,6 +750,28 @@ def update_service(doc_service, player_name, player_id, live_war, games):
         db['순위'] = range(1, len(db) + 1)
 
         doc_service.worksheet("팀 " + team).update([db.columns.values.tolist()] + db.values.tolist())
+        
+        db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화").iloc[:, 3:]
+
+        mean = np.nanmean(db_diff.values)
+        std = np.nanstd(db_diff.values)
+
+        z_diff = db.set_index("드래프트")[["변동"]].map(lambda x: (float(x) - mean) / std)
+        norm = Normalize(vmin=-3, vmax=3)
+        sm = ScalarMappable(cmap='coolwarm', norm=norm)
+
+        colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
+        colored_diff = colored_diff.map(lambda x: [color / 255 for color in x])
+
+        sheet = doc_service.worksheet("팀 " + team)
+        batch = batch_updater(sheet.spreadsheet)
+            
+        for i in range(db.shape[0]):
+            cell = f"E{i+2}"
+            fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
+            batch.format_cell_range(sheet, cell, fmt)
+            
+        batch.execute()
 
         db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
         n = min(7, len(db_diff.columns) - 3)
