@@ -592,6 +592,22 @@ def update_db(player_name, player_id, current_war, bat, pit):
     db = db.join(today)
 
     save_sheet(db.reset_index(), "teams")
+    
+    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff")
+    db_diff = db_diff.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
+    db_diff = db_diff.set_index("팀")
+
+    if date in db_diff.columns:
+        db_diff = db_diff.drop(date, axis=1)
+
+    db["gap"] = db.apply(lambda x: f'{float(x.iloc[-1]) - (0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
+    gap = db.iloc[:, [-1]]
+    gap = gap.rename(columns={"gap": date})
+
+    db_diff = db_diff.join(gap)
+    db_diff = db_diff.replace(np.nan, "")
+
+    save_sheet(db_diff.reset_index(), "teams diff")
 
 # 경기 결과 업데이트 함수
 def update_games(driver):
