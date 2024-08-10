@@ -712,8 +712,8 @@ def update_service(doc_service, player_name, player_id, live_war, games):
 
     doc_service.worksheet("팀 순위").update([db.columns.values.tolist()] + db.values.tolist())
     
-    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀")
-
+    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀").iloc[:-1]
+    
     mean = np.nanmean(db_diff.values)
     std = np.nanstd(db_diff.values)
 
@@ -728,10 +728,10 @@ def update_service(doc_service, player_name, player_id, live_war, games):
     batch = batch_updater(sheet.spreadsheet)
         
     for i in range(db.shape[0]):
-        if db.iloc[i]["팀"] == "퐈":
-            continue
         cell = f"D{i+2}"
         fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
+        if db.iloc[i]["팀"] == "퐈":
+            fmt = cellFormat(backgroundColor=color(1, 1, 1))
         batch.format_cell_range(sheet, cell, fmt)
         
     batch.execute()
