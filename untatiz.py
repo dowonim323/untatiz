@@ -906,18 +906,14 @@ def get_time_status():
     minute = now.minute
     second = now.second
 
-    if hour == 23:
-        if 0 <= minute < 30:
-            return 0
-        elif 30 <= minute < 50:
-            return 1
-        else:
-            return 2
+    if 0 <= minute < 15:
+        return 0
+    elif 15 <= minute < 30:
+        return 1
+    elif 30 <= minute < 45:
+        return 0
     else:
-        if 0 <= minute < 30:
-            return 0
-        else:
-            return 1
+        return 1
 
 # WAR 상태 반환 함수
 def get_war_status(doc_service):
@@ -998,10 +994,6 @@ while(True):
             
             driver.quit()
             
-            if time_current == 2:
-                update_status = 0
-                print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
-                continue
             if war_status == 0 and team_status == 1: break 
             if time_previous != time_current: break
             if team_previous != team_current: break
