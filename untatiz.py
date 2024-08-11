@@ -611,7 +611,7 @@ def update_db(player_name, player_id, current_war, bat, pit):
     save_sheet(db_diff.reset_index(), "teams diff")
 
 # 경기 결과 업데이트 함수
-def update_games(driver):
+def update_games(driver, return_type="df"):
     today = get_date()
     today_month = int(today.split('/')[0])
     today_day = int(today.split('/')[1])
@@ -665,6 +665,7 @@ def update_games(driver):
 
     game_number = 0
     updated_number = 0
+    started_number = 0
 
     if not games:
         games = [["오늘은 경기가 없습니다."]]
@@ -676,9 +677,11 @@ def update_games(driver):
                     games[i] = [game[0], str(game[1]) + " : " + str(game[2]), game[3]]
                     game_number += 1
                     updated_number += 1
+                    started_number += 1
                 else:
                     games[i] = [game[0], "업데이트 전", game[3]]
                     game_number += 1
+                    started_number += 1
             elif len(game) == 3 and game[1] == "우천취소":
                 games[i] = [game[0], "우천취소", game[2]]
             elif len(game) == 3:
@@ -688,8 +691,11 @@ def update_games(driver):
 
     games.insert(0, ["경기 날짜 : " + str(today), "", ""])
 
-    return pd.DataFrame(games)
-
+    if return_type == "df":
+        return pd.DataFrame(games)
+    else:
+        return pd.DataFrame(games), started_number
+    
 # 서비스 데이터 업데이트 함수
 def update_service(doc_service, player_name, player_id, live_war, games):
     db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
@@ -923,12 +929,12 @@ def get_war_status(doc_service):
 
 # 팀 상태 반환 함수
 def get_team_status(driver):
-    update = update_games(driver).values.tolist()
-    if update[1][0] == '오늘은 경기가 없습니다.': return 0
+    update, started = update_games(driver, "started")
+    update = update.values.tolist()
+    if update[1][0] == '오늘은 경기가 없습니다.': return 0, 0
     updated = int(re.search(r'(\d+)/(\d+)', update[1][0]).group(1))
     total = int(re.search(r'(\d+)/(\d+)', update[1][0]).group(2))
-    if updated == total: return 1
-    else: return 0
+    return started, updated, total
 
 # 업데이트된 팀 반환 함수
 def updated_teams(driver):
@@ -978,6 +984,8 @@ time_current = -1
 team_previous = set()
 team_current = set([0])
 
+update_status = 1
+
 while(True):
     try:
         while(True):
@@ -990,13 +998,21 @@ while(True):
             team_current = updated_teams(driver)
             
             war_status = get_war_status(doc_service)
-            team_status = get_team_status(driver)
+            started, updated, total = get_team_status(driver)
             
             driver.quit()
             
-            if war_status == 0 and team_status == 1: break 
-            if time_previous != time_current: break
-            if team_previous != team_current: break
+            if total > 0: update_status = 1
+            if update_status == 0:
+                print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+                time.sleep(60)
+                continue
+            if total == 0:
+                update_status = 0
+                break
+            if war_status == 0 and updated == total: break 
+            if started > 0 and time_previous != time_current: break
+            if started > 0 and team_previous != team_current: break
             
             print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
             time.sleep(60)
