@@ -931,7 +931,7 @@ def get_war_status(doc_service):
 def get_team_status(driver):
     update, started = update_games(driver, "started")
     update = update.values.tolist()
-    if update[1][0] == '오늘은 경기가 없습니다.': return 0, 0
+    if update[1][0] == '오늘은 경기가 없습니다.': return 0, 0, 0
     updated = int(re.search(r'(\d+)/(\d+)', update[1][0]).group(1))
     total = int(re.search(r'(\d+)/(\d+)', update[1][0]).group(2))
     return started, updated, total
