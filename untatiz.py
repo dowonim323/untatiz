@@ -1002,7 +1002,9 @@ while(True):
             
             driver.quit()
             
-            if total > 0: update_status = 1
+            if update_status == 0  and total > 0:
+                update_status = 1
+                break
             if update_status == 0:
                 print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
                 time.sleep(60)
