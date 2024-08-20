@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import pandas as pd
+import numpy as np
 import asyncio
 from datetime import datetime, time, timezone, timedelta
 import pytz
@@ -12,6 +13,9 @@ import os
 import json
 from matplotlib import font_manager, rc
 import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
+import dataframe_image as dfi
 
 # 로그 파일 경로 설정
 log_directory = "/home/imdw/untatiz/log/"
@@ -270,11 +274,30 @@ async def check_update():
                             date_str = get_date_today()
                             image_file = f"{IMAGE_PATH}{date_str}/팀 {team_name}_{date_str}.png"
                             await user.send(file=discord.File(image_file))
-                            sheet = doc_service.worksheet(f"팀 {team_name}")
-                            data = sheet.get_all_values()
-                            df = pd.DataFrame(data[1:], columns=data[0])
-                            sheet_content = df.to_string(index=False)
-                            await user.send(f"```{sheet_content}```")
+                            image_file = f"{IMAGE_PATH}{date_str}/팀 {team_name}_df_{date_str}.png"
+                            if not os.path.exists(image_file):
+                                sheet = doc_service.worksheet(f"팀 {team_name}")
+                                data = sheet.get_all_values()
+                                df = pd.DataFrame(data[1:], columns=data[0])
+                                df_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team_name + " 변화").iloc[:, 3:]
+                                mean = np.nanmean(df_diff.values)
+                                std = np.nanstd(df_diff.values)
+                                z_diff = df[["변동"]].map(lambda x: (float(x) - mean) / std)
+                                norm = Normalize(vmin=-3, vmax=3)
+                                sm = ScalarMappable(cmap='coolwarm', norm=norm)
+                                colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
+                                def rgb_to_hex(rgb):
+                                    return f'background-color: rgb({rgb[0]},{rgb[1]},{rgb[2]})'
+                                styled_df = df.style.apply(
+                                    lambda x: colored_diff.map(rgb_to_hex), axis=None
+                                ).set_table_styles(
+                                    [
+                                        {'selector': 'td', 'props': [('width', '100px'), ('height', '50px')]},  # 셀 너비와 높이 조정
+                                        {'selector': 'th', 'props': [('width', '100px'), ('height', '50px')]},  # 헤더 셀 너비와 높이 조정
+                                    ]
+                                )
+                                dfi.export(styled_df.hide(axis='index'), image_file, dpi=300)
+                            await user.send(file=discord.File(image_file))
                 
                 print("update finished at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f") + " and paused")
                 now = datetime.now()
