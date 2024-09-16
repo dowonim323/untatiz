@@ -1004,6 +1004,7 @@ while(True):
             
             if update_status == 0  and total > 0:
                 update_status = 1
+                print("update restarted at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
                 break
             if update_status == 0:
                 print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -1011,6 +1012,7 @@ while(True):
                 continue
             if total == 0:
                 update_status = 0
+                print("update paused at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
                 break
             if war_status == 0 and updated == total: break 
             if started > 0 and time_previous != time_current: break
@@ -1041,5 +1043,6 @@ while(True):
         
         time.sleep(60)
         
-    except:
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
         time.sleep(10)
