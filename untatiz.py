@@ -51,9 +51,6 @@ class StreamToLogger:
 sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
 sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
 
-display = Display(visible=0, size=(1920, 1080))
-display.start()
-
 # KST 시간을 기준으로 날짜를 반환하는 함수
 def get_date():
     kst = pytz.timezone('Asia/Seoul')
@@ -971,6 +968,10 @@ def updated_teams(driver):
 
 # 크롬 옵션 설정
 chrome_options = wd.ChromeOptions()
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument('--disable-gpu')
 
 # 구글 스프레드시트 로드
 doc_service = load_gspread("/home/imdw/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
@@ -989,7 +990,7 @@ update_status = 1
 while(True):
     try:
         while(True):
-            driver = wd.Chrome(service=Service(), options=chrome_options)
+            driver = wd.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
             
             time_previous = time_current
             time_current = get_time_status()
@@ -1021,7 +1022,7 @@ while(True):
             print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
             time.sleep(60)
         
-        driver = wd.Chrome(service=Service(), options=chrome_options)
+        driver = wd.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         
         print("update started at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
         
