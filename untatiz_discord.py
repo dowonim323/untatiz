@@ -202,6 +202,7 @@ async def on_ready():
 async def check_update():
     """정기적으로 업데이트를 체크합니다."""
     import re
+    global update_status
     try:
         channel = client.get_channel(CHANNEL_ID)
         update = doc_service.worksheet("업데이트").get_all_values()
