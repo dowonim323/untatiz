@@ -18,7 +18,7 @@ from matplotlib.cm import ScalarMappable
 import dataframe_image as dfi
 
 # 로그 파일 경로 설정
-log_directory = "/home/imdw/untatiz/log/"
+log_directory = "/home/ubuntu/untatiz/log/"
 log_filename = "discord.log"
 log_path = log_directory + log_filename
 
@@ -47,13 +47,13 @@ sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
 sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
 
 # 디스코드 봇 설정 로드
-with open('/home/imdw/untatiz/api/discord.json') as json_file:
+with open('/home/ubuntu/untatiz/api/discord.json') as json_file:
     discord_config = json.load(json_file)
 TOKEN = discord_config["token"]
 CHANNEL_ID = discord_config["channel_id"]
-DB_PATH = "/home/imdw/untatiz/db/discord_db.xlsx"
-IMAGE_PATH = "/home/imdw/untatiz/graph/"
-doc_service = gspread.service_account("/home/imdw/untatiz/api/untatiz-75f1c6db233b.json").open_by_url("https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
+DB_PATH = "/home/ubuntu/untatiz/db/discord_db.xlsx"
+IMAGE_PATH = "/home/ubuntu/untatiz/graph/"
+doc_service = gspread.service_account("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json").open_by_url("https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
 
 # 디스코드 클라이언트 설정
 intents = discord.Intents.all()
@@ -129,10 +129,10 @@ def untatiz_graph():
         date_to_display = now
     today = date_to_display.strftime('%m%d')
     
-    save_dir = os.path.join('/home/imdw/untatiz/graph', today)
+    save_dir = os.path.join('/home/ubuntu/untatiz/graph', today)
     os.makedirs(save_dir, exist_ok=True)
 
-    teams = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
+    teams = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
     teams = teams[teams["팀"] != "퐈"]
     teams.set_index('팀', inplace=True)
     teams_transposed = teams.T
@@ -160,7 +160,7 @@ def untatiz_graph():
     plt.close()
     
     for team in ['언', '앙', '삼', '준', '역', '뚝', '홍', '엉', '코', '옥']:
-        data = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team)
+        data = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team)
         data = data.iloc[:, 2:]
         data.set_index('Name', inplace=True)
         data_transposed = data.T
@@ -294,7 +294,7 @@ async def check_update():
                                 sheet = doc_service.worksheet(f"팀 {team_name}")
                                 data = sheet.get_all_values()
                                 df = pd.DataFrame(data[1:], columns=data[0])
-                                df_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team_name + " 변화").iloc[:, 3:]
+                                df_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team_name + " 변화").iloc[:, 3:]
                                 mean = np.nanmean(df_diff.values)
                                 std = np.nanstd(df_diff.values)
                                 z_diff = df[["변동"]].map(lambda x: (float(x) - mean) / std)
