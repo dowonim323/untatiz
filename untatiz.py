@@ -24,7 +24,7 @@ from matplotlib.cm import ScalarMappable
 os.environ['WDM_LOG'] = '0'
 
 # 로그 파일 경로 설정
-log_directory = "/home/imdw/untatiz/log/"
+log_directory = "/home/ubuntu/untatiz/log/"
 log_filename = "untatiz.log"
 log_path = log_directory + log_filename
 
@@ -69,9 +69,9 @@ def load_gspread(json_path, url):
 
 # 데이터 로드 함수
 def load_data():
-    player_name = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
-    player_id = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
-    transaction = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="transaction")
+    player_name = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
+    player_id = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
+    transaction = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="transaction")
 
     player_id = player_id.astype('str')
     transaction = transaction.astype('str')
@@ -165,9 +165,9 @@ def ntfy(data):
 
 # ID 업데이트 함수
 def update_id(driver):
-    player_name = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
-    player_id = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
-    transaction = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="transaction").replace(np.nan, "")
+    player_name = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
+    player_id = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
+    transaction = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="transaction").replace(np.nan, "")
 
     transaction["WAR"] = transaction["WAR"].astype(float)
     transaction["WAR"] = transaction["WAR"].apply(lambda x: f"{x:.2f}")
@@ -509,7 +509,7 @@ def update_db(player_name, player_id, current_war, bat, pit):
         data = pd.DataFrame({"ID": player_id.loc[team], "Name": player_name.loc[team]})
         data = data[np.isnan(pd.to_numeric(data["ID"])) == False]
 
-        db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team)
+        db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team)
         db = db.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
         db = db.set_index("index")
         db.index.name = None
@@ -539,7 +539,7 @@ def update_db(player_name, player_id, current_war, bat, pit):
         data_diff = pd.DataFrame({"ID": player_id.loc[team], "Name": player_name.loc[team]})
         data_diff = data_diff[np.isnan(pd.to_numeric(data_diff["ID"])) == False]
 
-        db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
+        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
         db_diff = db_diff.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
         db_diff = db_diff.set_index("index")
         db_diff.index.name = None
@@ -559,7 +559,7 @@ def update_db(player_name, player_id, current_war, bat, pit):
 
         save_sheet(data_diff.reset_index(), team + " 변화")
 
-    db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
+    db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
     db = db.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
     db = db.set_index("팀")
 
@@ -592,7 +592,7 @@ def update_db(player_name, player_id, current_war, bat, pit):
 
     save_sheet(db.reset_index(), "teams")
     
-    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff")
+    db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff")
     db_diff = db_diff.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
     db_diff = db_diff.set_index("팀")
 
@@ -696,7 +696,7 @@ def update_games(driver, return_type="df"):
     
 # 서비스 데이터 업데이트 함수
 def update_service(doc_service, player_name, player_id, live_war, games):
-    db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
+    db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
     db = db.iloc[:, [0, -2, -1]]
     date = db.columns[-1]
     db["변동"] = db.apply(lambda x: f'{float(x.iloc[-1]) - float(0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
@@ -716,7 +716,7 @@ def update_service(doc_service, player_name, player_id, live_war, games):
 
     doc_service.worksheet("팀 순위").update([db.columns.values.tolist()] + db.values.tolist())
     
-    db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀").iloc[:-1]
+    db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀").iloc[:-1]
     
     mean = np.nanmean(db_diff.values)
     std = np.nanstd(db_diff.values)
@@ -743,7 +743,7 @@ def update_service(doc_service, player_name, player_id, live_war, games):
     dfs = []
 
     for team in player_id.index:
-        db = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team)
+        db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team)
         db = db.iloc[:, [0, 2, -2, -1]]
         db = db.fillna("")
         db["변동"] = db.apply(lambda x: f'{float(x.iloc[-1]) - (0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
@@ -757,7 +757,7 @@ def update_service(doc_service, player_name, player_id, live_war, games):
 
         doc_service.worksheet("팀 " + team).update([db.columns.values.tolist()] + db.values.tolist())
         
-        db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화").iloc[:, 3:]
+        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화").iloc[:, 3:]
 
         mean = np.nanmean(db_diff.values)
         std = np.nanstd(db_diff.values)
@@ -779,7 +779,7 @@ def update_service(doc_service, player_name, player_id, live_war, games):
             
         batch.execute()
 
-        db_diff = pd.read_excel("/home/imdw/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
+        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
         n = min(7, len(db_diff.columns) - 3)
         db_diff = db_diff.iloc[:, [2] + list(range(-n, 0))]
         db_diff.insert(0, '팀', "팀 " + team)
@@ -883,13 +883,13 @@ def update_service(doc_service, player_name, player_id, live_war, games):
 def backup_db():
     kst = pytz.timezone('Asia/Seoul')
     now = str(datetime.now(kst).strftime('%Y%m%d%H%M%S'))
-    backup_dir = '/home/imdw/untatiz/backup/'
-    shutil.copy2("/home/imdw/untatiz/db/untatiz_db.xlsx", f'{backup_dir}{now}.xlsx')
+    backup_dir = '/home/ubuntu/untatiz/backup/'
+    shutil.copy2("/home/ubuntu/untatiz/db/untatiz_db.xlsx", f'{backup_dir}{now}.xlsx')
 
 # 시트 저장 함수
 def save_sheet(df, sheet_name):
-    book = load_workbook("/home/imdw/untatiz/db/untatiz_db.xlsx")
-    with pd.ExcelWriter("/home/imdw/untatiz/db/untatiz_db.xlsx", engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+    book = load_workbook("/home/ubuntu/untatiz/db/untatiz_db.xlsx")
+    with pd.ExcelWriter("/home/ubuntu/untatiz/db/untatiz_db.xlsx", engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         writer.workbook = book
         df.to_excel(writer, sheet_name=sheet_name, index=False)
 
@@ -969,15 +969,13 @@ def updated_teams(driver):
 
 # 크롬 옵션 설정
 chrome_options = wd.ChromeOptions()
+chrome_options.binary_location = "/usr/bin/chromium-browser"
 chrome_options.add_argument('--headless')
-chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument('--disable-gpu')
 
 # 구글 스프레드시트 로드
-doc_service = load_gspread("/home/imdw/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
-doc_fa = load_gspread("/home/imdw/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1ff2L7MFQbAWBtscwoQr1Y8UdY34f5Lk1ajR5jZu2rh8/edit?usp=sharing")
-doc_transaction = load_gspread("/home/imdw/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1mOni5ojcYOU7XCMHCZUuMzb4qZEcHH73zUqrw1J75GU/edit?usp=sharing")
+doc_service = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
+doc_fa = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1ff2L7MFQbAWBtscwoQr1Y8UdY34f5Lk1ajR5jZu2rh8/edit?usp=sharing")
+doc_transaction = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1mOni5ojcYOU7XCMHCZUuMzb4qZEcHH73zUqrw1J75GU/edit?usp=sharing")
 
 # 시간 및 팀 상태 초기화
 time_previous = 0
@@ -991,7 +989,7 @@ update_status = 1
 while(True):
     try:
         while(True):
-            driver = wd.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+            driver = wd.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
             
             time_previous = time_current
             time_current = get_time_status()
@@ -1023,7 +1021,7 @@ while(True):
             print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
             time.sleep(60)
         
-        driver = wd.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver = wd.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
         
         print("update started at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
         
