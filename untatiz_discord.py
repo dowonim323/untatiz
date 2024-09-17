@@ -192,10 +192,11 @@ def untatiz_graph():
 @client.event
 async def on_ready():
     """봇이 준비되었을 때 실행되는 함수입니다."""
+    global update_status
+    update_status = 0
     print(f'logged in as {client.user}')
     load_subscribers()
     check_update.start()
-    channel = client.get_channel(CHANNEL_ID)
 
 @tasks.loop(minutes=1)
 async def check_update():
@@ -207,6 +208,19 @@ async def check_update():
 
         if re.compile(r'\d{2}/\d{2}').search(update[1][0]).group() == get_date_slash():
             date = re.search(r'\d{2}/\d{2}', update[1][0]).group(0)
+            
+            if update_status == 0 and update[-1][1] == "업데이트 완료":
+                update_status = 1
+                print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f") + " and paused")
+                now = datetime.now()
+                target_time = now.replace(hour=14, minute=30, second=0, microsecond=0)
+                if target_time <= now:
+                    target_time += timedelta(days=1)
+                wait_seconds = (target_time - now).total_seconds()
+                await asyncio.sleep(wait_seconds)
+                print("update rebooted at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+                check_update.restart()
+                return
             
             if update[2][0] == "오늘은 경기가 없습니다.":
                 print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f") + " and paused")
