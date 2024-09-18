@@ -302,7 +302,7 @@ async def check_update():
                                 sm = ScalarMappable(cmap='coolwarm', norm=norm)
                                 colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
                                 def rgb_to_hex(rgb):
-                                    return f'background-color: rgb({rgb[0]},{rgb[1]},{rgb[2]})'
+                                    return f'background-color: #{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
                                 styled_df = df.style.apply(
                                     lambda x: colored_diff.map(rgb_to_hex), axis=None
                                 ).set_table_styles(
@@ -311,7 +311,7 @@ async def check_update():
                                         {'selector': 'th', 'props': [('width', '100px'), ('height', '50px')]},  # 헤더 셀 너비와 높이 조정
                                     ]
                                 )
-                                dfi.export(styled_df.hide(axis='index'), image_file, dpi=300)
+                                dfi.export(styled_df.hide(axis='index'), image_file, dpi=300, table_conversion="matplotlib")
                             await user.send(file=discord.File(image_file))
                 
                 print("update finished at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f") + " and paused")
