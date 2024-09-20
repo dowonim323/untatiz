@@ -224,6 +224,7 @@ async def check_update():
                 return
             
             if update[2][0] == "오늘은 경기가 없습니다.":
+                update_status = 1
                 print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f") + " and paused")
                 now = datetime.now()
                 target_time = now.replace(hour=14, minute=30, second=0, microsecond=0)
@@ -325,6 +326,7 @@ async def check_update():
                 check_update.restart()
                 return
 
+        update_status = 1
         print("update skipped at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
 
     except Exception as e:
