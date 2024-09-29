@@ -330,9 +330,9 @@ def load_statiz_bat(driver):
     bat = pd.merge(bat, bat_value[["ID", "포지션 RAA", "RPW"]], how='outer', on='ID')
 
     bat.insert(bat.columns.get_indexer_for(['WAR'])[0], 'WAR*', 0.0)
-    bat['포지션 RAA'] = bat['포지션 RAA'].astype(float)
-    bat['RPW'] = bat['RPW'].astype(float)
-    bat['oWAR'] = bat['oWAR'].astype(float)
+    bat['포지션 RAA'] = bat['포지션 RAA'].replace('', 0).astype(float)
+    bat['RPW'] = bat['RPW'].replace('', 0).astype(float)
+    bat['oWAR'] = bat['oWAR'].replace('', 0).astype(float)
     bat['포지션 RAA'] = bat['포지션 RAA'].fillna(0)
     bat['RPW'] = bat['RPW'].fillna(bat['RPW'].mean())
 
@@ -399,7 +399,7 @@ def load_statiz_pit(driver):
 
     pit = pit.loc[:, ~pit.columns.duplicated()]
 
-    pit['WAR'] = pit['WAR'].astype(float)
+    pit['WAR'] = pit['WAR'].replace('', 0).astype(float)
 
     pit = pit.set_index(keys='ID')
 
