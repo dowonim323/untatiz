@@ -1,0 +1,775 @@
+{% extends "layout.html" %}
+
+{% block title %}팀 {{ selected_team }}{% endblock %}
+
+{% block style %}
+.period-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.date-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.period-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.period-button:hover {
+    background-color: #d0d0d0;
+}
+.period-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+.date-input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 80px;  /* 너비 고정 */
+    text-align: center;  /* 텍스트 중앙 정렬 */
+}
+/* 달력 스타일 커스터마이징 */
+.flatpickr-day.disabled {
+    color: #ccc;
+    cursor: not-allowed;
+}
+.flatpickr-day.available {
+    background-color: #e8f5e9;
+}
+.flatpickr-day.available:hover {
+    background-color: #c8e6c9;
+}
+/* 달력 중앙 정렬 스타일 */
+.flatpickr-calendar {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+}
+.flatpickr-calendar:before,
+.flatpickr-calendar:after {
+    display: none;
+}
+/* 달력 배경 오버레이 */
+.calendar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+.flatpickr-calendar {
+    z-index: 1000;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0; /* 마진 제거 */
+    position: relative !important; /* 포지셔닝 컨텍스트 생성 */
+}
+th, td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+th {
+    background-color: #e0e0e0;
+    padding: 8px;
+    border-bottom: 1px solid #bdbdbd;
+    color: #333;
+}
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+tr:hover {
+    background-color: #f0f0f0;
+}
+.positive {
+    color: #4CAF50;
+}
+.negative {
+    color: #f44336;
+}
+.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 20px !important;
+    background-color: #e0e0e0;
+}
+.sortable:hover {
+    background-color: #d0d0d0;
+}
+.sortable.active::after {
+    content: "{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}";
+    position: absolute;
+    right: 5px;
+    color: #2196F3;
+}
+.sortable.active:hover {
+    background-color: #d0d0d0;
+}
+.subnav-button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.subnav-button:hover {
+    background-color: #d0d0d0;
+}
+.subnav-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+/* 서브 네비게이션 바 (팀 선택) */
+.team-select {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.team-select a {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.team-select a:hover {
+    background-color: #d0d0d0;
+}
+
+.team-select a.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+.period-label {
+    color: #666;
+    margin-right: 10px;
+    font-size: 14px;
+    line-height: 1;
+    padding: 8px 0;
+}
+
+.change-cell {
+    position: relative;
+    background: none !important;
+    padding: 0 !important;
+    height: 39px;
+}
+
+.change-bar {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    width: 80%;
+    height: 100%;
+    z-index: 0;
+}
+
+.change-value {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: block;
+    text-align: center;
+    line-height: 39px;
+    padding: 0;
+}
+
+/* 모드 선택 버튼 */
+.mode-select {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.mode-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.mode-button:hover {
+    background-color: #d0d0d0;
+}
+
+.mode-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+/* 그래프 컨테이너 */
+#chart {
+    width: 100%;
+    height: 500px;
+    margin: 20px 0;
+}
+
+/* 공통 버튼 스타일 */
+.mode-nav {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.mode-nav .subnav-button {
+    margin-right: 0;
+}
+/* 표 헤더 고정 스타일 - 더 강력한 선택자 사용 */
+table th, 
+.table-container table th, 
+.data-table th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    background-color: #e0e0e0 !important;
+}
+
+/* 테이블 컨테이너 스타일 수정 */
+.table-container {
+    margin-top: 20px;
+    width: 100%;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    max-height: none !important;
+    position: relative !important; /* 포지셔닝 컨텍스트 생성 */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 테이블 자체 스타일 */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0; /* 마진 제거 */
+    position: relative !important; /* 포지셔닝 컨텍스트 생성 */
+}
+
+/* 팀 타이틀 크기 조정 */
+h1 {
+    font-size: 20px;
+    margin: 0 0 0 20px; /* 상 우 하 좌 마진 설정 */
+    text-align: left; /* 왼쪽 정렬로 변경 */
+}
+
+.data-table {
+    min-width: 100%;
+}
+
+    @media (max-width: 800px) {
+    h1 {
+        margin-left: 0;
+        font-size: 18px;
+    }
+
+    .subnav,
+    .mode-nav {
+        justify-content: flex-start;
+    }
+
+    .period-select,
+    .date-select {
+        justify-content: center;
+    }
+
+    .subnav-button,
+    .period-button,
+    .date-input {
+        min-height: 40px;
+    }
+
+    .table-container {
+        overflow-y: visible !important;
+        max-height: none !important;
+    }
+
+    .data-table {
+        table-layout: fixed;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 6px 4px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-table .sortable {
+        padding-right: 16px !important;
+    }
+
+    .data-table.table-period-1 th:nth-child(1),
+    .data-table.table-period-1 td:nth-child(1) {
+        width: 12%;
+    }
+
+    .data-table.table-period-1 th:nth-child(2),
+    .data-table.table-period-1 td:nth-child(2) {
+        width: 16%;
+    }
+
+    .data-table.table-period-1 th:nth-child(3),
+    .data-table.table-period-1 td:nth-child(3) {
+        width: 28%;
+    }
+
+    .data-table.table-period-1 th:nth-child(4),
+    .data-table.table-period-1 td:nth-child(4) {
+        width: 18%;
+    }
+
+    .data-table.table-period-1 th:nth-child(5),
+    .data-table.table-period-1 td:nth-child(5) {
+        width: 26%;
+    }
+
+    .data-table.table-period-1 {
+        min-width: 100%;
+    }
+
+    .data-table.table-period-7 {
+        min-width: 660px;
+    }
+
+    .data-table.table-period-7 th,
+    .data-table.table-period-7 td {
+        padding: 5px 4px;
+        font-size: clamp(11px, calc(8.5px + 0.8vw), 12px);
+    }
+
+    .data-table.table-period-7 th:nth-child(1),
+    .data-table.table-period-7 td:nth-child(1) {
+        width: 10%;
+    }
+
+    .data-table.table-period-7 th:nth-child(2),
+    .data-table.table-period-7 td:nth-child(2) {
+        width: 12%;
+    }
+
+    .data-table.table-period-7 th:nth-child(3),
+    .data-table.table-period-7 td:nth-child(3) {
+        width: 16%;
+    }
+
+    .data-table.table-period-7 th:nth-child(n+4),
+    .data-table.table-period-7 td:nth-child(n+4) {
+        width: calc(62% / {{ selected_dates|length }});
+    }
+
+    .data-table.table-period-7 th {
+        white-space: normal;
+        line-height: 1.2;
+        word-break: break-word;
+    }
+
+    .change-cell {
+        height: 34px;
+    }
+
+    .change-value {
+        line-height: 34px;
+    }
+
+    #chart {
+        height: 72vh;
+        min-height: 460px;
+        margin: 12px 0;
+    }
+    }
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+{% endblock %}
+
+{% block content %}
+    <h1>팀 {{ selected_team }}</h1>
+    
+    <div class="subnav">
+        <div class="mode-nav">
+            <a href="/category/team?team={{ selected_team }}&sub=table&period=1&date={{ date }}&season={{ current_season_year }}" 
+               class="subnav-button {% if sub_category == 'table' or not sub_category %}active{% endif %}">
+                표
+            </a>
+            <a href="/category/team?team={{ selected_team }}&sub=graph&period=30&season={{ current_season_year }}" 
+               class="subnav-button {% if sub_category == 'graph' %}active{% endif %}">
+                그래프
+            </a>
+        </div>
+    </div>
+    
+    <div class="period-select">
+        <span class="period-label">조회 기간</span>
+        {% if sub_category != 'graph' %}
+            <a href="/category/team?team={{ selected_team }}&sub={{ sub_category }}&period=1{% if period == '1' %}&date={{ date }}{% endif %}&season={{ current_season_year }}" 
+               class="period-button {% if period == '1' %}active{% endif %}">
+                1일
+            </a>
+        {% endif %}
+        <a href="/category/team?team={{ selected_team }}&sub={{ sub_category }}&period=7{% if period == '7' %}&date={{ end_date }}{% endif %}&season={{ current_season_year }}" 
+           class="period-button {% if period == '7' %}active{% endif %}">
+            7일
+        </a>
+        {% if sub_category == 'graph' %}
+            <a href="/category/team?team={{ selected_team }}&sub=graph&period=30{% if period == '30' %}&date={{ end_date }}{% endif %}&season={{ current_season_year }}" 
+               class="period-button {% if period == '30' %}active{% endif %}">
+                30일
+            </a>
+            <a href="/category/team?team={{ selected_team }}&sub=graph&period=all&season={{ current_season_year }}" 
+               class="period-button {% if period == 'all' %}active{% endif %}">
+                전체
+            </a>
+        {% endif %}
+    </div>
+
+    <div class="date-select">
+        {% if period == '1' %}
+            <input type="text" class="date-input" id="single-date" value="{{ date }}" readonly>
+        {% elif period != 'all' %}
+            <span>{{ start_date }}</span>
+            <span>~</span>
+            <input type="text" class="date-input" id="end-date" value="{{ end_date }}" readonly>
+        {% endif %}
+    </div>
+
+    {% if sub_category == 'graph' %}
+        <div id="chart"></div>
+    {% else %}
+        <div class="table-container">
+            <table class="data-table table-period-{% if period == '1' %}1{% else %}7{% endif %}">
+                <tr>
+                    {% if period == '1' %}
+                        <th class="sortable {% if sort_by == 'WAR' %}active{% endif %}" 
+                            onclick="toggleSort('WAR')">
+                            순위
+                        </th>
+                    {% else %}
+                        <th class="sortable {% if sort_by == selected_dates[-1] %}active{% endif %}" 
+                            onclick="toggleSort('{{ selected_dates[-1] }}')">
+                            순위 ({{ end_date }})
+                        </th>
+                    {% endif %}
+                    <th class="sortable {% if sort_by == 'index' %}active{% endif %}" 
+                        onclick="toggleSort('index')">
+                        드래프트
+                    </th>
+                    <th class="sortable {% if sort_by == 'Name' %}active{% endif %}" 
+                        onclick="toggleSort('Name')">
+                        선수명
+                    </th>
+                    {% if period == '1' %}
+                        <th class="sortable {% if sort_by == 'WAR' %}active{% endif %}" 
+                            onclick="toggleSort('WAR')">
+                            WAR
+                        </th>
+                        <th class="sortable {% if sort_by == '변화량' %}active{% endif %}" 
+                            onclick="toggleSort('변화량')">
+                            변화량
+                        </th>
+                    {% else %}
+                        {% for date in selected_dates %}
+                            <th class="sortable {% if sort_by == date %}active{% endif %}" 
+                                onclick="toggleSort('{{ date }}')">
+                                {{ date }}
+                            </th>
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row['순위'] }}</td>
+                    <td>{{ row['index'] }}</td>
+                    <td>{{ row['Name'] }}</td>
+                    {% if period == '1' %}
+                        <td>{{ row['WAR'] }}</td>
+                        <td class="change-cell">
+                            <div class="change-bar" style="background-color: {{ row['변화량_색상'] }}"></div>
+                            <span class="change-value">{{ row['변화량'] }}</span>
+                        </td>
+                    {% else %}
+                        {% for date in selected_dates %}
+                            <td>{{ row[date] }}</td>
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    {% endif %}
+
+    <div class="calendar-overlay" id="calendarOverlay"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 사용 가능한 날짜 배열
+            const availableDates = {{ available_dates|tojson }};
+            const overlay = document.getElementById('calendarOverlay');
+            
+            const commonConfig = {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "m/d",
+                disableMobile: true,
+                locale: "ko",
+                onOpen: function() {
+                    overlay.style.display = 'block';
+                },
+                onClose: function() {
+                    overlay.style.display = 'none';
+                }
+            };
+
+            const chartMediaQuery = window.matchMedia('(max-width: 800px)');
+            let currentGraphData = null;
+
+            function isMobileChartView() {
+                return chartMediaQuery.matches;
+            }
+
+            function createTeamGraphTraces(graphData) {
+                return graphData.players.map((player, i) => ({
+                    name: player,
+                    x: graphData.dates,
+                    y: graphData.data[i],
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                }));
+            }
+
+            function createTeamGraphLayout(graphData) {
+                const isMobile = isMobileChartView();
+                const useAllPeriodTicks = "{{ period }}" === "all" && !isMobile;
+
+                const layout = {
+                    title: isMobile ? '' : '{{ selected_team }} 선수별 WAR 추이',
+                    xaxis: {
+                        title: isMobile ? '' : '날짜',
+                        tickangle: isMobile ? 0 : -45,
+                        tickmode: useAllPeriodTicks ? 'array' : 'auto',
+                        ticktext: useAllPeriodTicks ? graphData.dates.filter(date => date.endsWith('/01') || date.endsWith('/15')) : undefined,
+                        tickvals: useAllPeriodTicks ? graphData.dates.map((date, i) => i).filter((_, i) => graphData.dates[i].endsWith('/01') || graphData.dates[i].endsWith('/15')) : undefined,
+                        tickfont: isMobile ? { size: 10 } : undefined,
+                        nticks: isMobile ? 5 : undefined,
+                        automargin: true
+                    },
+                    yaxis: {
+                        title: isMobile ? '' : 'WAR',
+                        tickfont: isMobile ? { size: 10 } : undefined,
+                        automargin: true
+                    },
+                    hovermode: 'closest',
+                    showlegend: false,
+                    margin: isMobile ? {
+                        t: 12,
+                        r: 8,
+                        b: 40,
+                        l: 36
+                    } : {
+                        b: 100
+                    },
+                    autosize: true
+                };
+
+                if (isMobile) {
+                    layout.dragmode = false;
+                }
+
+                return layout;
+            }
+
+            function createTeamGraphConfig() {
+                const isMobile = isMobileChartView();
+
+                return {
+                    responsive: true,
+                    scrollZoom: false,
+                    displayModeBar: isMobile ? true : 'hover',
+                    displaylogo: false,
+                     modeBarButtonsToRemove: isMobile ? [
+                        'pan2d',
+                        'select2d',
+                        'lasso2d',
+                        'zoomIn2d',
+                        'zoomOut2d',
+                        'autoScale2d',
+                        'hoverClosestCartesian',
+                        'hoverCompareCartesian',
+                        'toggleSpikelines',
+                        'toImage'
+                    ] : []
+                };
+            }
+
+            function renderTeamGraph(graphData) {
+                currentGraphData = graphData;
+                Plotly.newPlot(
+                    'chart',
+                    createTeamGraphTraces(graphData),
+                    createTeamGraphLayout(graphData),
+                    createTeamGraphConfig()
+                );
+            }
+
+            function handleTeamGraphResize() {
+                if (!currentGraphData) {
+                    return;
+                }
+
+                const isMobile = isMobileChartView();
+                const chartElement = document.getElementById('chart');
+                const chartDragMode = chartElement && chartElement.layout ? chartElement.layout.dragmode : undefined;
+                const shouldRefreshGraph = isMobile ? chartDragMode !== false : chartDragMode === false;
+
+                if (shouldRefreshGraph) {
+                    renderTeamGraph(currentGraphData);
+                    return;
+                }
+
+                Plotly.Plots.resize('chart');
+            }
+             
+            {% if sub_category == 'table' or not sub_category %}
+                {% if period == '1' %}
+                    flatpickr("#single-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            window.location.href = '/category/team?team={{ selected_team }}&sub=table&period=1&date=' + dateStr + '&season={{ current_season_year }}';
+                        }
+                    });
+                {% else %}
+                    flatpickr("#end-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ end_date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            window.location.href = '/category/team?team={{ selected_team }}&sub=table&period=7&date=' + dateStr + '&season={{ current_season_year }}';
+                        }
+                    });
+                {% endif %}
+            {% endif %}
+            
+            {% if sub_category == 'graph' and period != 'all' %}
+                // 그래프 모드에서 flatpickr 초기화
+                console.log('Initializing graph date picker');
+                const graphDateElement = document.getElementById('end-date');
+                if (graphDateElement) {
+                    flatpickr("#end-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ end_date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            console.log('Graph date selected:', dateStr);
+                            fetch('/team_graph_data?team={{ selected_team }}&period={{ period }}&season={{ current_season_year }}&date=' + dateStr)
+                                .then(response => response.json())
+                                .then(newGraphData => {
+                                    renderTeamGraph(newGraphData);
+                                     
+                                    // URL 히스토리 업데이트 (선택 사항)
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set('date', dateStr);
+                                    window.history.pushState({}, '', url);
+                                    
+                                    // 시작 날짜 업데이트 (선택 사항)
+                                    if (newGraphData.dates.length > 0) {
+                                        const startDateSpan = document.querySelector('.date-select span:first-child');
+                                        if (startDateSpan) {
+                                            startDateSpan.textContent = newGraphData.dates[0];
+                                        }
+                                    }
+                                })
+                                .catch(err => console.error('Error fetching graph data:', err));
+                        }
+                    });
+                    console.log('Graph date picker initialized');
+                } else {
+                    console.error('Graph date element not found');
+                }
+            {% endif %}
+            
+            {% if sub_category == 'graph' %}
+                // 페이지 로드 시 초기 그래프 그리기
+                console.log('Initializing initial graph');
+                const initialGraphData = {{ graph_data|tojson }};
+                console.log('Initial graph data loaded:', initialGraphData);
+
+                renderTeamGraph(initialGraphData);
+                console.log('Initial graph drawn');
+                
+                // 화면 크기 변경 시 그래프 다시 그리기
+                window.addEventListener('resize', handleTeamGraphResize);
+            {% endif %}
+        });
+
+        function toggleSort(column) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const period = urlParams.get('period') || '1';
+            const currentSort = urlParams.get('sort') || (period === '1' ? 'WAR' : '{{ end_date }}');
+            const currentOrder = urlParams.get('order') || 'desc';
+            const sub = urlParams.get('sub') || 'table';
+            
+            let newOrder = 'desc';
+            if (currentSort === column) {
+                newOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+            } else if (column === 'Name' || column === 'index') {
+                newOrder = 'asc';
+            }
+            
+            if (period === '1') {
+                window.location.href = `/category/team?team={{ selected_team }}&sub=${sub}&period=1&date={{ date }}&sort=${column}&order=${newOrder}&season={{ current_season_year }}`;
+            } else {
+                window.location.href = `/category/team?team={{ selected_team }}&sub=${sub}&period=7&date={{ end_date }}&sort=${column}&order=${newOrder}&season={{ current_season_year }}`;
+            }
+        }
+    </script>
+{% endblock %} 

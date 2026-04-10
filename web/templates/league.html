@@ -1,0 +1,1019 @@
+{% extends "layout.html" %}
+
+{% block title %}리그 순위{% endblock %}
+
+{% block style %}
+.period-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.date-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.period-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.period-button:hover {
+    background-color: #d0d0d0;
+}
+.period-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+.date-select select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.date-select span {
+    color: #666;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+th, td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+th {
+    background-color: #e0e0e0;
+    padding: 8px;
+    border-bottom: 1px solid #bdbdbd;
+    color: #333;
+}
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+tr:hover {
+    background-color: #e0e0e0;
+}
+.positive {
+    color: #4CAF50;
+}
+.negative {
+    color: #f44336;
+}
+.date-input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 80px;
+    text-align: center;
+}
+/* 달력 스타일 커스터마이징 */
+.flatpickr-day.disabled {
+    color: #ccc;
+    cursor: not-allowed;
+}
+.flatpickr-day.available {
+    background-color: #e8f5e9;
+}
+.flatpickr-day.available:hover {
+    background-color: #c8e6c9;
+}
+
+/* 달력 중앙 정렬 스타일 */
+.flatpickr-calendar {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+}
+.flatpickr-calendar:before,
+.flatpickr-calendar:after {
+    display: none;
+}
+
+/* 달력 배경 오버레이 */
+.calendar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+.flatpickr-calendar {
+    z-index: 1000;
+}
+
+.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 25px !important;
+    background-color: #e0e0e0;
+}
+
+.sortable:hover {
+    background-color: #d0d0d0;
+}
+
+.sortable.active {
+    background-color: #e0e0e0; /* 기본 헤더 배경색과 동일하게 설정 */
+    color: inherit; /* 원래 글자색 유지 */
+}
+
+.sortable.active::after {
+    content: "{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}";
+    position: absolute;
+    right: 5px;
+    color: #2196F3; /* 화살표 색상은 파란색 유지 */
+}
+
+.sortable.active:hover {
+    background-color: #d0d0d0;
+}
+
+tr:first-child {
+    box-shadow: none;
+}
+
+.period-label {
+    color: #666;
+    margin-right: 10px;
+    font-size: 14px;
+    line-height: 1;
+    padding: 8px 0;
+}
+
+.war-cell {
+    position: relative;
+    background: none !important;
+    padding: 0 !important;
+    height: 39px;
+}
+
+.war-bar {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    height: 100%;
+    background-color: rgba(76, 175, 80, 0.3);
+    z-index: 0;
+}
+
+.war-value {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: block;
+    text-align: center;
+    line-height: 39px;
+    padding: 0;
+}
+
+.change-cell {
+    position: relative;
+    background: none !important;
+    padding: 0 !important;
+    height: 39px;
+}
+
+.change-bar {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    width: 80%;
+    height: 100%;
+    z-index: 0;
+}
+
+.change-value {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: block;
+    text-align: center;
+    line-height: 39px;
+    padding: 0;
+}
+
+.subnav {
+    display: flex;
+    justify-content: flex-start;  /* 왼쪽 정렬 */
+    margin: 20px 0;  /* 상하 여백 추가 */
+}
+
+.subnav-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.subnav-button:hover {
+    background-color: #d0d0d0;
+}
+
+.subnav-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+/* 공통 버튼 스타일 */
+.mode-nav {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.mode-nav .subnav-button {
+    margin-right: 0;
+}
+
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 리그 순위 표 컬럼 폭 조정 */
+{% if sub_category == 'table' and period == '1' %}
+    .data-table th:nth-child(1), 
+    .data-table td:nth-child(1) {
+        width: 20%; /* 순위 컬럼 */
+    }
+    
+    .data-table th:nth-child(2), 
+    .data-table td:nth-child(2) {
+        width: 20%; /* 팀 컬럼 */
+    }
+    
+    .data-table th:nth-child(3), 
+    .data-table td:nth-child(3) {
+        width: 40%; /* WAR 컬럼 */
+    }
+    
+    .data-table th:nth-child(4), 
+    .data-table td:nth-child(4) {
+        width: 20%; /* 변화량 컬럼 */
+    }
+{% endif %}
+
+    /* 테이블 셀 가운데 정렬 */
+    .data-table th, 
+    .data-table td {
+        text-align: center !important;
+        vertical-align: middle !important;
+    }
+    
+    /* WAR 셀과 변화량 셀 내부 요소 정렬 */
+    .war-cell, .change-cell {
+        position: relative;
+        padding: 0 !important;
+        height: 39px;
+    }
+    
+    .war-value, .change-value {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        display: block;
+        text-align: center;
+        line-height: 39px;
+    }
+    
+    /* 정렬 아이콘 위치 조정 */
+    .sortable {
+        position: relative;
+        padding-right: 25px !important;
+    }
+    
+    .sortable::after {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    /* 테이블 헤더 정중앙 정렬 */
+    .data-table th {
+        text-align: center !important;
+        vertical-align: middle !important;
+        padding: 10px 5px !important; /* 패딩 조정 */
+        position: relative;
+    }
+    
+    /* 정렬 아이콘 위치 조정 */
+    .sortable {
+        position: relative;
+    }
+    
+    .sortable::after {
+        content: "";
+        display: inline-block;
+        width: 10px;
+        margin-left: 5px;
+    }
+    
+    /* 정렬 화살표 위치 조정 */
+    .sort-arrow {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        color: #1976D2;
+        font-weight: bold;
+    }
+
+    /* 테이블 레이아웃 고정 */
+    .data-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    /* 1일 조회 기간 테이블 컬럼 폭 고정 */
+    {% if period == '1' %}
+    .data-table th:nth-child(1), 
+    .data-table td:nth-child(1) {
+        width: 20% !important; /* 순위 컬럼 */
+    }
+
+    .data-table th:nth-child(2), 
+    .data-table td:nth-child(2) {
+        width: 20% !important; /* 팀 컬럼 */
+    }
+
+    .data-table th:nth-child(3), 
+    .data-table td:nth-child(3) {
+        width: 40% !important; /* WAR 컬럼 */
+    }
+
+    .data-table th:nth-child(4), 
+    .data-table td:nth-child(4) {
+        width: 20% !important; /* 변화량 컬럼 */
+    }
+    {% endif %}
+
+    /* 7일 조회 기간 테이블 컬럼 폭 고정 */
+    {% if period == '7' %}
+    .data-table th:nth-child(1), 
+    .data-table td:nth-child(1) {
+        width: 15% !important; /* 순위 컬럼 */
+    }
+
+    .data-table th:nth-child(2), 
+    .data-table td:nth-child(2) {
+        width: 15% !important; /* 팀 컬럼 */
+    }
+
+    /* 나머지 날짜 컬럼들은 균등하게 분배 */
+    .data-table th:nth-child(n+3), 
+    .data-table td:nth-child(n+3) {
+        width: calc(70% / {{ selected_dates|length }}) !important;
+    }
+    {% endif %}
+
+    /* 정렬 활성화된 헤더 스타일 수정 - 원래 스타일로 복원 */
+    .data-table th.active {
+        background-color: #e0e0e0; /* 기본 헤더 배경색과 동일하게 설정 */
+        color: inherit; /* 원래 글자색 유지 */
+        font-weight: normal; /* 원래 글자 굵기 유지 */
+    }
+
+    /* 정렬 화살표 스타일 - 파란색만 유지 */
+    .sort-arrow {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 14px;
+        color: #1976D2;
+        font-weight: bold;
+    }
+
+    @media (max-width: 800px) {
+        .subnav,
+        .mode-nav {
+            justify-content: flex-start;
+        }
+
+        .period-select,
+        .date-select {
+            justify-content: center;
+        }
+
+        .period-button,
+        .subnav-button,
+        .date-input {
+            min-height: 40px;
+        }
+
+        .league-table:not(.league-table-wide) {
+            min-width: 100%;
+            table-layout: fixed;
+        }
+
+        .league-table:not(.league-table-wide) th,
+        .league-table:not(.league-table-wide) td {
+            padding: 6px 4px !important;
+            font-size: clamp(12px, calc(8px + 1vw), 14px);
+            line-height: 1.25;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .league-table:not(.league-table-wide) .sortable {
+            padding-right: 18px !important;
+        }
+
+        .league-table:not(.league-table-wide) .sort-arrow {
+            right: 6px;
+            font-size: clamp(12px, calc(8px + 1vw), 14px);
+        }
+
+        .league-table:not(.league-table-wide) th:nth-child(1),
+        .league-table:not(.league-table-wide) td:nth-child(1) {
+            width: 14% !important;
+        }
+
+        .league-table:not(.league-table-wide) th:nth-child(2),
+        .league-table:not(.league-table-wide) td:nth-child(2) {
+            width: 18% !important;
+        }
+
+        .league-table:not(.league-table-wide) th:nth-child(3),
+        .league-table:not(.league-table-wide) td:nth-child(3) {
+            width: 42% !important;
+        }
+
+        .league-table:not(.league-table-wide) th:nth-child(4),
+        .league-table:not(.league-table-wide) td:nth-child(4) {
+            width: 26% !important;
+        }
+
+        .league-table:not(.league-table-wide) .war-cell,
+        .league-table:not(.league-table-wide) .change-cell {
+            padding: 0 !important;
+            height: 34px;
+        }
+
+        .league-table:not(.league-table-wide) .war-value,
+        .league-table:not(.league-table-wide) .change-value {
+            line-height: 34px;
+        }
+
+        .league-table-wide {
+            min-width: 640px;
+            table-layout: fixed;
+        }
+
+        .league-table-wide th,
+        .league-table-wide td {
+            padding: 5px 4px !important;
+            font-size: clamp(11px, calc(8.5px + 0.8vw), 12px);
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .league-table-wide td {
+            white-space: nowrap;
+        }
+
+        .league-table-wide th {
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        .league-table-wide .sortable {
+            padding-right: 16px !important;
+        }
+
+        .league-table-wide .sort-arrow {
+            right: 5px;
+            font-size: clamp(11px, calc(8.5px + 0.8vw), 12px);
+        }
+
+        .league-table-wide th:nth-child(1),
+        .league-table-wide td:nth-child(1) {
+            width: 11% !important;
+        }
+
+        .league-table-wide th:nth-child(2),
+        .league-table-wide td:nth-child(2) {
+            width: 13% !important;
+        }
+
+        {% if period == '7' %}
+        .league-table-wide th:nth-child(n+3),
+        .league-table-wide td:nth-child(n+3) {
+            width: calc(76% / {{ selected_dates|length }}) !important;
+        }
+        {% endif %}
+
+        #chart {
+            height: 72vh;
+            min-height: 460px;
+        }
+    }
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+<!-- 최신 버전의 plotly.js 사용 -->
+<script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+{% endblock %}
+
+{% block content %}
+    <!-- <h1>리그 순위</h1> 제거 -->
+    
+    <div class="subnav">
+        <a href="/category/league?sub=table&period=1" 
+           class="subnav-button {% if sub_category == 'table' %}active{% endif %}">
+            표
+        </a>
+        <a href="/category/league?sub=graph&period=30" 
+           class="subnav-button {% if sub_category == 'graph' %}active{% endif %}">
+            그래프
+        </a>
+    </div>
+
+    <!-- 디버깅 정보 표시 (개발 중에만 사용) -->
+    <div style="background-color: #f8f9fa; padding: 10px; margin: 10px 0; border: 1px solid #ddd; display: none;">
+        <p>디버깅 정보:</p>
+        <p>sort: {{ sort }}</p>
+        <p>order: {{ order }}</p>
+        <p>sort_by: {{ sort_by }}</p>
+        <p>sort_order: {{ sort_order }}</p>
+    </div>
+
+    {% if sub_category == 'table' %}
+        <div class="period-select">
+            <span class="period-label">조회 기간</span>
+            <a href="/category/league?period=1&season={{ current_season_year }}" 
+               class="period-button {% if period == '1' %}active{% endif %}">
+                1일
+            </a>
+            <a href="/category/league?period=7&season={{ current_season_year }}" 
+               class="period-button {% if period == '7' %}active{% endif %}">
+                7일
+            </a>
+        </div>
+
+        <div class="date-select">
+            {% if period == '1' %}
+                <input type="text" class="date-input" id="single-date" value="{{ date }}" readonly>
+            {% else %}
+                <span>{{ start_date }}</span>
+                <span>~</span>
+                <input type="text" class="date-input" id="end-date" value="{{ end_date }}" readonly>
+            {% endif %}
+        </div>
+
+        {% if period == '1' %}
+            <div class="table-scroll">
+                <table class="data-table league-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="toggleSort('순위')">
+                                순위
+                                {% if sort_by == 'WAR' or sort_by == '순위' %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" onclick="toggleSort('팀')">
+                                팀
+                                {% if sort_by == '팀' %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" onclick="toggleSort('WAR')">
+                                WAR
+                                {% if sort_by == 'WAR' or sort_by == '순위' %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" onclick="toggleSort('변화량')">
+                                변화량
+                                {% if sort_by == '변화량' %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr>
+                                <td>{{ row['순위'] }}</td>
+                                <td>{{ row['팀'] }}</td>
+                                <td class="war-cell">
+                                    <div class="war-bar" style="width: {{ row['WAR_비율'] }}%"></div>
+                                    <span class="war-value">{{ row['WAR'] }}</span>
+                                </td>
+                                <td class="change-cell">
+                                    <div class="change-bar" style="background-color: {{ row['변화량_색상'] }}"></div>
+                                    <span class="change-value">{{ row['변화량'] }}</span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="table-scroll">
+                <table class="data-table league-table league-table-wide">
+                    <thead>
+                        <tr>
+                            <th class="sortable" onclick="toggleSort('순위')">
+                                순위 ({{ end_date }})
+                                {% if sort_by == '순위' or sort_by == selected_dates[-1] %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            <th class="sortable" onclick="toggleSort('팀')">
+                                팀
+                                {% if sort_by == '팀' %}
+                                    <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                {% endif %}
+                            </th>
+                            {% for date in selected_dates %}
+                                <th class="sortable" onclick="toggleSort('{{ date }}')">
+                                    {{ date }}
+                                    {% if sort_by == date %}
+                                        <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                                    {% endif %}
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr>
+                                <td>{{ row['순위'] }}</td>
+                                <td>{{ row['팀'] }}</td>
+                                {% for date in selected_dates %}
+                                    <td>{{ row[date] }}</td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
+        <div class="calendar-overlay" id="calendarOverlay"></div>
+    {% else %}
+        <div class="period-select">
+            <span class="period-label">조회 기간</span>
+            <a href="/category/league?sub=graph&period=7&season={{ current_season_year }}" 
+               class="period-button {% if period == '7' %}active{% endif %}">
+                7일
+            </a>
+            <a href="/category/league?sub=graph&period=30&season={{ current_season_year }}" 
+               class="period-button {% if period == '30' %}active{% endif %}">
+                30일
+            </a>
+            <a href="/category/league?sub=graph&period=all&season={{ current_season_year }}" 
+               class="period-button {% if period == 'all' %}active{% endif %}">
+                전체
+            </a>
+        </div>
+
+        {% if period != 'all' %}
+        <div class="date-select">
+            <span>{{ start_date }}</span>
+            <span>~</span>
+            <input type="text" class="date-input" id="graph-date" value="{{ end_date }}" readonly>
+        </div>
+        {% endif %}
+
+        <div id="chart"></div>
+        
+        <!-- 그래프 모드에도 overlay 추가 -->
+        <div class="calendar-overlay" id="calendarOverlay"></div>
+    {% endif %}
+
+    <script>
+        // 페이지 로드 시 즉시 실행되는 코드 추가
+        console.log('League page loaded');
+        
+        // 정렬 함수 수정
+        function toggleSort(column) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const period = urlParams.get('period') || '1';
+            
+            // 순위 컬럼 클릭 시 WAR 또는 마지막 날짜 기준으로 정렬하도록 변경
+            let sortColumn = column;
+            if (column === '순위') {
+                if (period === '1') {
+                    sortColumn = 'WAR';
+                } else {
+                    // 7일 모드에서는 마지막 날짜로 정렬
+                    const lastDate = "{{ selected_dates[-1] }}";
+                    sortColumn = lastDate;
+                }
+            }
+            
+            const currentSort = urlParams.get('sort') || (period === '1' ? 'WAR' : '{{ selected_dates[-1] }}');
+            const currentOrder = urlParams.get('order') || 'desc';
+            
+            let newOrder = 'desc';
+            // 팀 컬럼은 첫 클릭 시 asc, 다시 클릭 시 desc
+            if (column === '팀' && currentSort !== '팀') {
+                newOrder = 'asc';
+            } else if (currentSort === sortColumn) {
+                newOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+            }
+            
+            // URL 생성 및 이동
+            let url = '';
+            if (period === '1') {
+                url = `/category/league?sub=table&period=1&date={{ date }}&sort=${sortColumn}&order=${newOrder}&season={{ current_season_year }}`;
+            } else {
+                url = `/category/league?sub=table&period=7&date={{ end_date }}&sort=${sortColumn}&order=${newOrder}&season={{ current_season_year }}`;
+            }
+            
+            console.log('Redirecting to:', url);
+            window.location.href = url;
+        }
+        
+        // 페이지 로드 완료 후 실행되는 코드
+        document.addEventListener('DOMContentLoaded', function() {
+            // 사용 가능한 날짜 배열
+            const availableDates = {{ available_dates|tojson }};
+            const overlay = document.getElementById('calendarOverlay');
+            
+            const commonConfig = {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "m/d",
+                disableMobile: true,
+                locale: "ko",
+                onOpen: function() {
+                    overlay.style.display = 'block';
+                },
+                onClose: function() {
+                    overlay.style.display = 'none';
+                }
+            };
+
+            const chartMediaQuery = window.matchMedia('(max-width: 800px)');
+            let currentGraphData = null;
+
+            function isMobileChartView() {
+                return chartMediaQuery.matches;
+            }
+
+            function createLeagueGraphTraces(graphData) {
+                return graphData.teams.map((team, i) => ({
+                    name: team,
+                    x: graphData.dates,
+                    y: graphData.data[i],
+                    type: 'scatter',
+                    mode: 'lines+markers'
+                }));
+            }
+
+            function createLeagueGraphLayout(graphData) {
+                const isMobile = isMobileChartView();
+                const useAllPeriodTicks = "{{ period }}" === "all" && !isMobile;
+
+                const layout = {
+                    title: isMobile ? '' : 'WAR 추이',
+                    xaxis: {
+                        title: isMobile ? '' : '날짜',
+                        tickangle: isMobile ? 0 : -45,
+                        tickmode: useAllPeriodTicks ? 'array' : 'auto',
+                        ticktext: useAllPeriodTicks ? graphData.dates.filter(date => date.endsWith('/01') || date.endsWith('/15')) : undefined,
+                        tickvals: useAllPeriodTicks ? graphData.dates.map((date, i) => i).filter((_, i) => graphData.dates[i].endsWith('/01') || graphData.dates[i].endsWith('/15')) : undefined,
+                        tickfont: isMobile ? { size: 10 } : undefined,
+                        nticks: isMobile ? 5 : undefined,
+                        automargin: true
+                    },
+                    yaxis: {
+                        title: isMobile ? '' : 'WAR',
+                        tickfont: isMobile ? { size: 10 } : undefined,
+                        automargin: true
+                    },
+                    hovermode: 'closest',
+                    showlegend: true,
+                    legend: {
+                        orientation: 'h',
+                        x: isMobile ? 0.5 : undefined,
+                        xanchor: isMobile ? 'center' : undefined,
+                        y: isMobile ? -0.16 : -0.2,
+                        yanchor: 'top',
+                        font: isMobile ? { size: 10 } : undefined,
+                        entrywidthmode: isMobile ? 'fraction' : undefined,
+                        entrywidth: isMobile ? 0.19 : undefined
+                    },
+                    margin: isMobile ? {
+                        t: 12,
+                        r: 8,
+                        b: 68,
+                        l: 36
+                    } : {
+                        b: 100
+                    },
+                    autosize: true
+                };
+
+                if (isMobile) {
+                    layout.dragmode = false;
+                }
+
+                return layout;
+            }
+
+            function createLeagueGraphConfig() {
+                const isMobile = isMobileChartView();
+
+                return {
+                    responsive: true,
+                    scrollZoom: false,
+                    displayModeBar: isMobile ? true : 'hover',
+                    displaylogo: false,
+                     modeBarButtonsToRemove: isMobile ? [
+                        'pan2d',
+                        'select2d',
+                        'lasso2d',
+                        'zoomIn2d',
+                        'zoomOut2d',
+                        'autoScale2d',
+                        'hoverClosestCartesian',
+                        'hoverCompareCartesian',
+                        'toggleSpikelines',
+                        'toImage'
+                    ] : []
+                };
+            }
+
+            function renderLeagueGraph(graphData) {
+                currentGraphData = graphData;
+                Plotly.newPlot(
+                    'chart',
+                    createLeagueGraphTraces(graphData),
+                    createLeagueGraphLayout(graphData),
+                    createLeagueGraphConfig()
+                );
+            }
+
+            function handleLeagueGraphResize() {
+                if (!currentGraphData) {
+                    return;
+                }
+
+                const isMobile = isMobileChartView();
+                const chartElement = document.getElementById('chart');
+                const chartDragMode = chartElement && chartElement.layout ? chartElement.layout.dragmode : undefined;
+                const shouldRefreshGraph = isMobile ? chartDragMode !== false : chartDragMode === false;
+
+                if (shouldRefreshGraph) {
+                    renderLeagueGraph(currentGraphData);
+                    return;
+                }
+
+                Plotly.Plots.resize('chart');
+            }
+             
+            {% if sub_category == 'table' %}
+                {% if period == '1' %}
+                    // 단일 날짜 선택기
+                    flatpickr("#single-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            window.location.href = '/category/league?period=1&date=' + dateStr + '&season={{ current_season_year }}';
+                        }
+                    });
+                {% else %}
+                    // 시작 날짜 선택기
+                    flatpickr("#end-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ end_date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            window.location.href = '/category/league?period=7&date=' + dateStr + '&season={{ current_season_year }}';
+                        }
+                    });
+                {% endif %}
+            {% endif %}
+            
+            {% if sub_category == 'graph' and period != 'all' %}
+                // 그래프 모드에서 flatpickr 초기화
+                console.log('Initializing graph date picker');
+                const graphDateElement = document.getElementById('graph-date');
+                if (graphDateElement) {
+                    flatpickr("#graph-date", {
+                        ...commonConfig,
+                        defaultDate: "{{ end_date }}",
+                        enable: availableDates,
+                        onChange: function(selectedDates, dateStr) {
+                            console.log('Graph date selected:', dateStr);
+                            fetch('/graph_data?period={{ period }}&season={{ current_season_year }}&date=' + dateStr)
+                                .then(response => response.json())
+                                .then(newGraphData => {
+                                    renderLeagueGraph(newGraphData);
+                                    
+                                    // URL 히스토리 업데이트 (선택 사항)
+                                    const url = new URL(window.location.href);
+                                    url.searchParams.set('date', dateStr);
+                                    window.history.pushState({}, '', url);
+                                    
+                                    // 시작 날짜 업데이트 (선택 사항)
+                                    if (newGraphData.dates.length > 0) {
+                                        const startDateSpan = document.querySelector('.date-select span:first-child');
+                                        if (startDateSpan) {
+                                            startDateSpan.textContent = newGraphData.dates[0];
+                                        }
+                                    }
+                                })
+                                .catch(err => console.error('Error fetching graph data:', err));
+                        }
+                    });
+                    console.log('Graph date picker initialized');
+                } else {
+                    console.error('Graph date element not found');
+                }
+            {% endif %}
+
+            {% if sub_category == 'graph' %}
+                // 페이지 로드 시 초기 그래프 그리기
+                console.log('Initializing initial graph');
+                const initialGraphData = {{ graph_data|tojson }};
+                console.log('Initial graph data loaded:', initialGraphData);
+
+                renderLeagueGraph(initialGraphData);
+                console.log('Initial graph drawn');
+                
+                // 화면 크기 변경 시 그래프 다시 그리기
+                window.addEventListener('resize', handleLeagueGraphResize);
+            {% endif %}
+
+            // 현재 시각 요소에 마우스 오버 이벤트 추가
+            const dateElement = document.querySelector('.current-date');
+            if (dateElement) {
+                dateElement.addEventListener('mouseover', function(e) {
+                    // 현재 시각 요소의 위치 정보 가져오기
+                    const rect = dateElement.getBoundingClientRect();
+                    
+                    // 오버레이 위치 설정 - 현재 시각의 왼쪽 끝과 일치하도록
+                    overlay.style.left = rect.left + 'px';
+                    overlay.style.top = (rect.bottom + 5) + 'px';
+                    
+                    // 오버레이 표시
+                    overlay.style.display = 'block';
+                });
+                
+                dateElement.addEventListener('mouseout', function(e) {
+                    // 마우스가 오버레이로 이동하는 경우 오버레이 유지
+                    if (e.relatedTarget && (e.relatedTarget === overlay || overlay.contains(e.relatedTarget))) {
+                        return;
+                    }
+                    // 오버레이 숨기기
+                    overlay.style.display = 'none';
+                });
+            }
+            
+            // 오버레이에 마우스 아웃 이벤트 추가
+            overlay.addEventListener('mouseout', function(e) {
+                // 마우스가 현재 시각 요소로 이동하는 경우 오버레이 유지
+                if (e.relatedTarget && e.relatedTarget === dateElement) {
+                    return;
+                }
+                // 오버레이 숨기기
+                overlay.style.display = 'none';
+            });
+        });
+    </script>
+{% endblock %} 

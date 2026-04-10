@@ -1,0 +1,203 @@
+{% extends "layout.html" %}
+
+{% block title %}뉴스 - UNTATIZ{% endblock %}
+
+{% block style %}
+.news-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.news-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+.news-item {
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+    display: flex;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.news-item:hover {
+    background-color: #f0f0f0;
+}
+
+.news-date {
+    font-weight: bold;
+    color: #666;
+    min-width: 80px;
+}
+
+.news-title {
+    flex-grow: 1;
+    padding-left: 20px;
+}
+
+.news-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+}
+
+.news-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 800px;
+    max-height: 80%;
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.news-modal-header {
+    border-bottom: 1px solid #eee;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+}
+
+.news-modal-date {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.news-modal-title {
+    font-size: 22px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.news-modal-content {
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.close-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 24px;
+    color: #999;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-button:hover {
+    color: #333;
+}
+
+/* 반응형 스타일 */
+@media (max-width: 600px) {
+    .news-item {
+        flex-direction: column;
+    }
+    
+    .news-date {
+        margin-bottom: 8px;
+    }
+    
+    .news-title {
+        padding-left: 0;
+    }
+    
+    .news-modal {
+        width: 95%;
+    }
+}
+{% endblock %}
+
+{% block content %}
+<div class="news-container">
+    <h1>뉴스</h1>
+    <ul class="news-list">
+        {% for date, news in news_items %}
+        <li class="news-item" data-date="{{ date }}">
+            <div class="news-date">{{ date }}</div>
+            <div class="news-title">{{ news.title }}</div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- 뉴스 오버레이 -->
+<div class="news-overlay" id="newsOverlay">
+    <div class="news-modal">
+        <span class="close-button" id="closeButton">&times;</span>
+        <div class="news-modal-header">
+            <div class="news-modal-date" id="modalDate"></div>
+            <h2 class="news-modal-title" id="modalTitle"></h2>
+        </div>
+        <div class="news-modal-content" id="modalContent"></div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 뉴스 데이터 객체 (서버에서 제공)
+        const newsData = {{ news_data|tojson }};
+        
+        // 모든 뉴스 아이템에 클릭 이벤트 추가
+        const newsItems = document.querySelectorAll('.news-item');
+        const overlay = document.getElementById('newsOverlay');
+        const closeButton = document.getElementById('closeButton');
+        const modalDate = document.getElementById('modalDate');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+        
+        newsItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const date = this.getAttribute('data-date');
+                const news = newsData[date];
+                
+                // 모달 내용 채우기
+                modalDate.textContent = date;
+                modalTitle.textContent = news.title;
+                modalContent.textContent = news.content || news.body || '';
+                
+                // 오버레이 표시
+                overlay.style.display = 'block';
+                document.body.style.overflow = 'hidden'; // 스크롤 방지
+            });
+        });
+        
+        // 닫기 버튼 이벤트
+        closeButton.addEventListener('click', function() {
+            overlay.style.display = 'none';
+            document.body.style.overflow = 'auto'; // 스크롤 허용
+        });
+        
+        // 오버레이 배경 클릭 시 닫기
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+        
+        // ESC 키로 닫기
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && overlay.style.display === 'block') {
+                overlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        });
+    });
+</script>
+{% endblock %} 

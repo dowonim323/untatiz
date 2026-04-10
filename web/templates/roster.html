@@ -1,0 +1,1403 @@
+{% extends "layout.html" %}
+
+{% block title %}팀 로스터{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+{% endblock %}
+
+{% block style %}
+.subnav {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.subnav-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.subnav-button:hover {
+    background-color: #d0d0d0;
+}
+
+.subnav-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    margin: 20px 0;
+}
+
+table {
+    min-width: 100%;
+    width: max-content;  /* 컨텐츠 크기에 맞춰 테이블 너비 설정 */
+    border-collapse: collapse;
+}
+
+/* 팀 컬럼 고정 */
+.team-column {
+    position: sticky;
+    left: 0;
+    background-color: #fff;
+    z-index: 1;
+}
+
+/* 팀 컬럼이 다른 컬럼과 겹칠 때 구분선 표시 */
+.team-column::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    border-right: 2px solid #ddd;
+}
+
+/* 짝수 행의 팀 컬럼 배경색 */
+tr:nth-child(even) .team-column {
+    background-color: #f9f9f9;
+}
+
+th, td {
+    padding: 12px 8px;  /* 패딩 높이 증가 */
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+th {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tr:hover {
+    background-color: #f0f0f0;
+}
+
+/* 선수 이름과 WAR 스타일 */
+.player-name {
+    margin-bottom: 4px;
+}
+
+.player-war {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.transaction-player {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.transaction-player-name,
+.transaction-player-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.transaction-player-id {
+    font-size: 0.9em;
+    color: #666;
+    white-space: nowrap;
+}
+
+/* 로스터 액션 버튼 컨테이너 */
+.roster-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 10px 0 20px;
+}
+
+/* 액션 버튼 스타일 */
+.action-button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-height: 40px;
+}
+
+/* 추가 버튼 */
+.add-button {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.add-button:hover {
+    background-color: #45a049;
+}
+
+/* 수정 버튼 */
+.edit-button {
+    background-color: #2196F3;
+    color: white;
+}
+
+.edit-button:hover {
+    background-color: #0b7dda;
+}
+
+/* 삭제 버튼 */
+.delete-button {
+    background-color: #f44336;
+    color: white;
+}
+
+.delete-button:hover {
+    background-color: #d32f2f;
+}
+
+/* 모달 스타일 */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 5px;
+    width: 300px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+}
+
+.password-input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+#confirmButton, #cancelButton {
+    flex: 1;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #2196F3;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+#confirmButton:hover, #cancelButton:hover {
+    background-color: #0b7dda;
+}
+
+/* 로스터 변동 추가 폼 스타일 수정 */
+.add-transaction-container {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: none; /* 기본적으로 숨김 */
+}
+
+.add-transaction-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.add-transaction-form {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    margin-bottom: 5px;
+    font-weight: bold;
+    font-size: 14px;
+    color: #555;
+}
+
+.transaction-date-notice {
+    grid-column: span 3;
+    padding: 10px 12px;
+    border-left: 3px solid #2196F3;
+    border-radius: 4px;
+    background-color: #f8fbff;
+    color: #555;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.transaction-date-notice strong {
+    color: #333;
+}
+
+.form-control {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-control:focus {
+    border-color: #2196F3;
+    outline: none;
+}
+
+/* 버튼 컨테이너 추가 */
+.form-buttons {
+    grid-column: span 3;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.submit-button {
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    flex: 1;
+    margin-right: 10px;
+}
+
+.submit-button:hover {
+    background-color: #45a049;
+}
+
+.cancel-button {
+    padding: 10px;
+    background-color: #9e9e9e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    flex: 1;
+    margin-left: 10px;
+}
+
+.cancel-button:hover {
+    background-color: #757575;
+}
+
+/* 알림 메시지 스타일 */
+.alert {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+    display: none;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* 달력 오버레이 */
+.calendar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.flatpickr-calendar {
+    z-index: 1000;
+}
+
+/* 로스터 변동 삭제 폼 스타일 추가 */
+.delete-transaction-container {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: none; /* 기본적으로 숨김 */
+}
+
+.delete-transaction-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.delete-transaction-form {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+/* 버튼 스타일 수정 */
+.add-form .submit-button {
+    background-color: #4CAF50; /* 추가 버튼은 초록색 */
+}
+
+.add-form .submit-button:hover {
+    background-color: #45a049;
+}
+
+.delete-form .submit-button {
+    background-color: #f44336; /* 삭제 버튼은 빨간색 */
+}
+
+.delete-form .submit-button:hover {
+    background-color: #d32f2f;
+}
+
+.cancel-button {
+    background-color: #9e9e9e; /* 모든 취소 버튼은 회색 */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    flex: 1;
+    margin-left: 10px;
+    padding: 10px;
+}
+
+.cancel-button:hover {
+    background-color: #757575;
+}
+
+/* 로스터 변동 수정 폼 스타일 추가 */
+.edit-transaction-container {
+    background-color: #f5f5f5;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: none; /* 기본적으로 숨김 */
+}
+
+.edit-transaction-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.edit-transaction-form {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+#editFormFields {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+}
+
+/* 버튼 스타일 수정 */
+.edit-form .submit-button {
+    background-color: #2196F3; /* 수정 버튼은 파란색 */
+}
+
+.edit-form .submit-button:hover {
+    background-color: #0b7dda;
+}
+
+/* Autocomplete styles */
+.autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.autocomplete-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.autocomplete-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item:hover {
+    background-color: #f0f7ff;
+}
+
+.autocomplete-item .player-info {
+    font-size: 12px;
+    color: #666;
+}
+
+.autocomplete-item .player-name-result {
+    font-weight: 500;
+}
+
+.autocomplete-loading {
+    padding: 10px;
+    text-align: center;
+    color: #888;
+}
+
+.autocomplete-no-results {
+    padding: 10px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+.transaction-table {
+    min-width: 520px;
+    margin: 0 auto;
+}
+
+@media (max-width: 800px) {
+    .subnav {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .subnav-button {
+        margin: 0;
+    }
+
+    .roster-actions {
+        justify-content: stretch;
+    }
+
+    .action-button {
+        flex: 1 1 120px;
+    }
+
+    .modal-content {
+        width: calc(100% - 32px);
+        margin: 24px auto;
+    }
+
+    .add-transaction-container,
+    .delete-transaction-container,
+    .edit-transaction-container {
+        padding: 16px;
+    }
+
+    .add-transaction-form,
+    .delete-transaction-form,
+    .edit-transaction-form,
+    #editFormFields {
+        grid-template-columns: 1fr;
+    }
+
+    .delete-transaction-form > .form-group[style],
+    .edit-transaction-form > .form-group[style],
+    #editFormFields {
+        grid-column: 1 / -1 !important;
+    }
+
+    .form-buttons {
+        grid-column: 1 / -1;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .submit-button,
+    .cancel-button {
+        width: 100%;
+        margin: 0;
+    }
+
+    .transaction-table {
+        min-width: 100%;
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    .transaction-table th,
+    .transaction-table td {
+        padding: 6px 4px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .transaction-table th:nth-child(1),
+    .transaction-table td:nth-child(1) {
+        width: 22%;
+    }
+
+    .transaction-table th:nth-child(2),
+    .transaction-table td:nth-child(2) {
+        width: 24%;
+    }
+
+    .transaction-table th:nth-child(3),
+    .transaction-table td:nth-child(3) {
+        width: 34%;
+    }
+
+    .transaction-table th:nth-child(4),
+    .transaction-table td:nth-child(4) {
+        width: 20%;
+    }
+}
+{% endblock %}
+
+{% block content %}
+    <div class="filter-container">
+        <!-- 필터 내용 -->
+    </div>
+    
+    <div class="subnav">
+        <a href="/category/roster?sub=draft" 
+           class="subnav-button {% if sub_category == 'draft' %}active{% endif %}">
+            드래프트
+        </a>
+        <a href="/category/roster?sub=transaction" 
+           class="subnav-button {% if sub_category == 'transaction' %}active{% endif %}">
+            로스터 변동
+        </a>
+    </div>
+
+    {% if sub_category == 'draft' %}
+        <div class="table-container">
+            <table>
+                <tr>
+                    <th class="team-column">팀</th>
+                    {% for col in columns %}
+                        <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+                {% for row in rows %}
+                <tr>
+                    <td class="team-column">{{ row['팀'] }}</td>
+                    {% for col in columns %}
+                        <td style="background-color: {{ row[col]['bg_color'] }}">
+                            {% if row[col]['name'] %}
+                                <div class="player-name">{{ row[col]['name'] }}</div>
+                                {% if row[col]['war'] %}
+                                    <div class="player-war">{{ row[col]['war'] }}</div>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    {% else %}
+        {% if sub_category == 'transaction' %}
+        <div class="roster-actions">
+            <button class="action-button add-button" id="showAddFormButton">추가</button>
+            <button class="action-button edit-button">수정</button>
+            <button class="action-button delete-button">삭제</button>
+        </div>
+        {% endif %}
+        
+        <!-- 로스터 변동 추가 폼 -->
+        <div class="add-transaction-container" id="addTransactionContainer">
+            <div class="add-transaction-title">로스터 변동 추가</div>
+            
+            <div id="alertSuccess" class="alert alert-success"></div>
+            <div id="alertDanger" class="alert alert-danger"></div>
+            
+            <form id="addTransactionForm" class="add-transaction-form add-form">
+                <div class="transaction-date-notice">
+                    <strong>날짜 입력 안내</strong><br>
+                    입력한 날짜의 로스터 변동은 해당 날짜 경기 시작 전부터 적용됩니다. 따라서 그날 WAR는 변동 후 팀에 반영되며, 경기 종료 후 처리로 반영하려면 다음 날짜를 입력하세요.
+                </div>
+
+                <div class="form-group">
+                    <label for="date">날짜</label>
+                    <input type="text" id="date" name="date" class="form-control" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">선수명</label>
+                    <div class="autocomplete-wrapper">
+                        <input type="text" id="name" name="name" class="form-control" required autocomplete="off" placeholder="선수 이름 검색...">
+                        <div class="autocomplete-results" id="addPlayerResults"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="player_id">선수 ID</label>
+                    <input type="number" id="player_id" name="player_id" class="form-control" required readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label for="old_team">이전 팀</label>
+                    <select id="old_team" name="old_team" class="form-control" required>
+                        <option value="">팀 선택</option>
+                        <option value="퐈">팀 퐈</option>
+                        {% for team in team_order %}
+                        <option value="{{ team }}">팀 {{ team }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="new_team">새 팀</label>
+                    <select id="new_team" name="new_team" class="form-control" required>
+                        <option value="">팀 선택</option>
+                        <option value="퐈">팀 퐈</option>
+                        {% for team in team_order %}
+                        <option value="{{ team }}">팀 {{ team }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-buttons">
+                    <button type="submit" class="submit-button">추가</button>
+                    <button type="button" class="cancel-button" id="cancelAddButton">취소</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- 로스터 변동 삭제 폼 -->
+        <div class="delete-transaction-container" id="deleteTransactionContainer" style="display: none;">
+            <div class="delete-transaction-title">로스터 변동 삭제</div>
+            
+            <div id="deleteAlertSuccess" class="alert alert-success"></div>
+            <div id="deleteAlertDanger" class="alert alert-danger"></div>
+            
+            <form id="deleteTransactionForm" class="delete-transaction-form delete-form">
+                <div class="form-group" style="grid-column: span 3;">
+                    <label for="transaction_id">삭제할 항목</label>
+                    <select id="transaction_id" name="transaction_id" class="form-control" required>
+                        <option value="">항목 선택</option>
+                        {% for row in rows %}
+                        <option value="{{ row['rowid'] }}">{{ row['날짜'] }} - {{ row['선수명'] }} ({{ row['변동내용'] }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-buttons">
+                    <button type="submit" class="submit-button">삭제</button>
+                    <button type="button" class="cancel-button" id="cancelDeleteButton">취소</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- 로스터 변동 수정 폼 -->
+        <div class="edit-transaction-container" id="editTransactionContainer" style="display: none;">
+            <div class="edit-transaction-title">로스터 변동 수정</div>
+            
+            <div id="editAlertSuccess" class="alert alert-success"></div>
+            <div id="editAlertDanger" class="alert alert-danger"></div>
+            
+            <form id="editTransactionForm" class="edit-transaction-form edit-form">
+                <div class="form-group" style="grid-column: span 3;">
+                    <label for="edit_transaction_id">수정할 항목</label>
+                    <select id="edit_transaction_id" name="transaction_id" class="form-control" required>
+                        <option value="">항목 선택</option>
+                        {% for row in rows %}
+                        <option value="{{ row['rowid'] }}">{{ row['날짜'] }} - {{ row['선수명'] }} ({{ row['변동내용'] }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="editFormFields" style="display: none; grid-column: span 3;">
+                    <div class="transaction-date-notice">
+                        <strong>날짜 입력 안내</strong><br>
+                        입력한 날짜의 로스터 변동은 해당 날짜 경기 시작 전부터 적용됩니다. 따라서 그날 WAR는 변동 후 팀에 반영되며, 경기 종료 후 처리로 반영하려면 다음 날짜를 입력하세요.
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit_date">날짜</label>
+                        <input type="text" id="edit_date" name="date" class="form-control" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_name">선수명</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" id="edit_name" name="name" class="form-control" required autocomplete="off" placeholder="선수 이름 검색...">
+                            <div class="autocomplete-results" id="editPlayerResults"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_player_id">선수 ID</label>
+                        <input type="number" id="edit_player_id" name="player_id" class="form-control" required readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_old_team">이전 팀</label>
+                        <select id="edit_old_team" name="old_team" class="form-control" required>
+                            <option value="">팀 선택</option>
+                            <option value="퐈">팀 퐈</option>
+                            {% for team in team_order %}
+                            <option value="{{ team }}">팀 {{ team }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="edit_new_team">새 팀</label>
+                        <select id="edit_new_team" name="new_team" class="form-control" required>
+                            <option value="">팀 선택</option>
+                            <option value="퐈">팀 퐈</option>
+                            {% for team in team_order %}
+                            <option value="{{ team }}">팀 {{ team }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-buttons" id="editFormButtons" style="display: none;">
+                    <button type="submit" class="submit-button">수정</button>
+                    <button type="button" class="cancel-button" id="cancelEditButton">취소</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- 로스터 변동 테이블 -->
+        <div class="table-container">
+            <table class="transaction-table">
+                <tr>
+                    <th>날짜</th>
+                    <th>선수명</th>
+                    <th>변동내용</th>
+                    <th>WAR</th>
+                </tr>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row['날짜'] }}</td>
+                    <td>
+                        <span class="transaction-player">
+                            <span class="transaction-player-name">{{ row['선수명'] }}</span>
+                            <span class="transaction-player-id">{{ row['선수ID'] }}</span>
+                        </span>
+                    </td>
+                    <td>{{ row['변동내용'] }}</td>
+                    <td>{{ row['WAR'] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <div class="calendar-overlay" id="calendarOverlay"></div>
+        
+        <script>
+            // Player autocomplete functionality
+            let searchTimeout;
+            
+            function setupAutocomplete(inputId, resultsId, playerIdFieldId, warFieldId) {
+                const input = document.getElementById(inputId);
+                const resultsDiv = document.getElementById(resultsId);
+                const playerIdField = document.getElementById(playerIdFieldId);
+                const warField = document.getElementById(warFieldId);
+                
+                if (!input || !resultsDiv) return;
+                
+                input.addEventListener('input', function() {
+                    clearTimeout(searchTimeout);
+                    const query = this.value.trim();
+                    
+                    if (query.length < 2) {
+                        resultsDiv.innerHTML = '';
+                        return;
+                    }
+                    
+                    resultsDiv.innerHTML = '<div class="autocomplete-loading">검색 중...</div>';
+                    
+                    searchTimeout = setTimeout(async () => {
+                        try {
+                            const resp = await fetch(`/api/players/search?q=${encodeURIComponent(query)}`);
+                            const data = await resp.json();
+                            
+                            if (data.players && data.players.length > 0) {
+                                resultsDiv.innerHTML = data.players.map(p => `
+                                    <div class="autocomplete-item" 
+                                         onclick="selectPlayer('${inputId}', '${playerIdFieldId}', '${warFieldId}', '${resultsId}', ${p.id}, '${p.name.replace(/'/g, "\\'")}', ${p.war || 0})">
+                                        <span class="player-name-result">${p.name}</span>
+                                        <span class="player-info">${p.position || '-'} | WAR: ${(p.war || 0).toFixed(2)}</span>
+                                    </div>
+                                `).join('');
+                            } else {
+                                resultsDiv.innerHTML = '<div class="autocomplete-no-results">검색 결과 없음</div>';
+                            }
+                        } catch (error) {
+                            console.error('Search error:', error);
+                            resultsDiv.innerHTML = '<div class="autocomplete-no-results">검색 오류</div>';
+                        }
+                    }, 300);
+                });
+                
+                // Close results when clicking outside
+                document.addEventListener('click', function(e) {
+                    if (!input.contains(e.target) && !resultsDiv.contains(e.target)) {
+                        resultsDiv.innerHTML = '';
+                    }
+                });
+            }
+            
+            function selectPlayer(inputId, playerIdFieldId, warFieldId, resultsId, playerId, playerName, war) {
+                document.getElementById(inputId).value = playerName;
+                document.getElementById(playerIdFieldId).value = playerId;
+                if (warFieldId && document.getElementById(warFieldId)) {
+                    document.getElementById(warFieldId).value = war.toFixed(2);
+                }
+                document.getElementById(resultsId).innerHTML = '';
+            }
+            
+            // Initialize autocomplete for both forms (WAR field removed - auto-fetched from war_daily)
+            document.addEventListener('DOMContentLoaded', function() {
+                setupAutocomplete('name', 'addPlayerResults', 'player_id', null);
+                setupAutocomplete('edit_name', 'editPlayerResults', 'edit_player_id', null);
+            });
+        </script>
+        
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const overlay = document.getElementById('calendarOverlay');
+                const addTransactionContainer = document.getElementById('addTransactionContainer');
+                const deleteTransactionContainer = document.getElementById('deleteTransactionContainer');
+                const editTransactionContainer = document.getElementById('editTransactionContainer');
+                const showAddFormButton = document.getElementById('showAddFormButton');
+                const cancelAddButton = document.getElementById('cancelAddButton');
+                const cancelDeleteButton = document.getElementById('cancelDeleteButton');
+                const cancelEditButton = document.getElementById('cancelEditButton');
+                const editTransactionId = document.getElementById('edit_transaction_id');
+                const editFormFields = document.getElementById('editFormFields');
+                const editFormButtons = document.getElementById('editFormButtons');
+                
+                // 추가 폼 표시 버튼 이벤트
+                if (showAddFormButton) {
+                    showAddFormButton.addEventListener('click', function() {
+                        // 비밀번호 인증 모달 표시
+                        currentAction = 'add';
+                        modalTitle.textContent = '추가 작업 인증';
+                        openModal();
+                    });
+                }
+                
+                // 수정 버튼 클릭 이벤트
+                document.querySelectorAll('.edit-button').forEach(button => {
+                    button.addEventListener('click', function() {
+                        currentAction = 'edit';
+                        modalTitle.textContent = '수정 작업 인증';
+                        openModal();
+                    });
+                });
+                
+                // 삭제 버튼 클릭 이벤트
+                document.querySelectorAll('.delete-button').forEach(button => {
+                    button.addEventListener('click', function() {
+                        currentAction = 'delete';
+                        modalTitle.textContent = '삭제 작업 인증';
+                        openModal();
+                    });
+                });
+                
+                // 취소 버튼 이벤트
+                if (cancelAddButton) {
+                    cancelAddButton.addEventListener('click', function() {
+                        addTransactionContainer.style.display = 'none';
+                    });
+                }
+                
+                if (cancelDeleteButton) {
+                    cancelDeleteButton.addEventListener('click', function() {
+                        deleteTransactionContainer.style.display = 'none';
+                    });
+                }
+                
+                if (cancelEditButton) {
+                    cancelEditButton.addEventListener('click', function() {
+                        editTransactionContainer.style.display = 'none';
+                    });
+                }
+                
+                // 수정할 항목 선택 이벤트
+                if (editTransactionId) {
+                    editTransactionId.addEventListener('change', function() {
+                        const selectedId = this.value;
+                        if (selectedId) {
+                            // 선택한 항목의 데이터 가져오기
+                            const formData = new FormData();
+                            formData.append('transaction_id', selectedId);
+                            
+                            fetch('/get_transaction', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    // 폼 필드에 데이터 채우기
+                                    document.getElementById('edit_date').value = data.data.date;
+                                    document.getElementById('edit_name').value = data.data.name;
+                                    document.getElementById('edit_player_id').value = data.data.id;
+                                    document.getElementById('edit_old_team').value = data.data.old_team;
+                                    document.getElementById('edit_new_team').value = data.data.new_team;
+                                    // WAR is auto-fetched from war_daily based on date
+                                    
+                                    // 폼 필드와 버튼 표시
+                                    editFormFields.style.display = 'grid';
+                                    editFormButtons.style.display = 'flex';
+                                    
+                                    // flatpickr 초기화
+                                    if (typeof flatpickr !== 'undefined') {
+                                        flatpickr("#edit_date", {
+                                            dateFormat: "Y/m/d",
+                                            disableMobile: true,
+                                            locale: "ko",
+                                            onOpen: function() {
+                                                overlay.style.display = 'block';
+                                            },
+                                            onClose: function() {
+                                                overlay.style.display = 'none';
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    alert(data.message);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                alert('데이터를 가져오는 중 오류가 발생했습니다.');
+                            });
+                        } else {
+                            // 선택 해제 시 폼 필드와 버튼 숨기기
+                            editFormFields.style.display = 'none';
+                            editFormButtons.style.display = 'none';
+                        }
+                    });
+                }
+                
+                // 폼 제출 이벤트 처리 - 추가
+                const addForm = document.getElementById('addTransactionForm');
+                const alertSuccess = document.getElementById('alertSuccess');
+                const alertDanger = document.getElementById('alertDanger');
+                
+                if (addForm) {
+                    addForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        
+                        // 폼 데이터 수집
+                        const formData = new FormData(addForm);
+                        
+                        // AJAX 요청
+                        fetch('/add_transaction', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // 성공 메시지 표시
+                                alertSuccess.textContent = data.message;
+                                alertSuccess.style.display = 'block';
+                                alertDanger.style.display = 'none';
+                                
+                                // 폼 초기화
+                                addForm.reset();
+                                
+                                // 페이지 새로고침 (1초 후)
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            } else {
+                                // 오류 메시지 표시
+                                alertDanger.textContent = data.message;
+                                alertDanger.style.display = 'block';
+                                alertSuccess.style.display = 'none';
+                            }
+                        })
+                        .catch(error => {
+                            // 오류 메시지 표시
+                            alertDanger.textContent = "서버 오류가 발생했습니다.";
+                            alertDanger.style.display = 'block';
+                            alertSuccess.style.display = 'none';
+                            console.error('Error:', error);
+                        });
+                    });
+                }
+                
+                // 폼 제출 이벤트 처리 - 삭제
+                const deleteForm = document.getElementById('deleteTransactionForm');
+                const deleteAlertSuccess = document.getElementById('deleteAlertSuccess');
+                const deleteAlertDanger = document.getElementById('deleteAlertDanger');
+                
+                if (deleteForm) {
+                    deleteForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        
+                        // 폼 데이터 수집
+                        const formData = new FormData(deleteForm);
+                        
+                        // AJAX 요청
+                        fetch('/delete_transaction', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // 성공 메시지 표시
+                                deleteAlertSuccess.textContent = data.message;
+                                deleteAlertSuccess.style.display = 'block';
+                                deleteAlertDanger.style.display = 'none';
+                                
+                                // 폼 초기화
+                                deleteForm.reset();
+                                
+                                // 페이지 새로고침 (1초 후)
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            } else {
+                                // 오류 메시지 표시
+                                deleteAlertDanger.textContent = data.message;
+                                deleteAlertDanger.style.display = 'block';
+                                deleteAlertSuccess.style.display = 'none';
+                            }
+                        })
+                        .catch(error => {
+                            // 오류 메시지 표시
+                            deleteAlertDanger.textContent = "서버 오류가 발생했습니다.";
+                            deleteAlertDanger.style.display = 'block';
+                            deleteAlertSuccess.style.display = 'none';
+                            console.error('Error:', error);
+                        });
+                    });
+                }
+                
+                // 폼 제출 이벤트 처리 - 수정
+                const editForm = document.getElementById('editTransactionForm');
+                const editAlertSuccess = document.getElementById('editAlertSuccess');
+                const editAlertDanger = document.getElementById('editAlertDanger');
+                
+                if (editForm) {
+                    editForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        
+                        // 폼 데이터 수집
+                        const formData = new FormData(editForm);
+                        
+                        // AJAX 요청
+                        fetch('/update_transaction', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // 성공 메시지 표시
+                                editAlertSuccess.textContent = data.message;
+                                editAlertSuccess.style.display = 'block';
+                                editAlertDanger.style.display = 'none';
+                                
+                                // 폼 초기화
+                                editForm.reset();
+                                editFormFields.style.display = 'none';
+                                editFormButtons.style.display = 'none';
+                                
+                                // 페이지 새로고침 (1초 후)
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1000);
+                            } else {
+                                // 오류 메시지 표시
+                                editAlertDanger.textContent = data.message;
+                                editAlertDanger.style.display = 'block';
+                                editAlertSuccess.style.display = 'none';
+                            }
+                        })
+                        .catch(error => {
+                            // 오류 메시지 표시
+                            editAlertDanger.textContent = "서버 오류가 발생했습니다.";
+                            editAlertDanger.style.display = 'block';
+                            editAlertSuccess.style.display = 'none';
+                            console.error('Error:', error);
+                        });
+                    });
+                }
+                
+                // flatpickr 초기화
+                flatpickr("#date", {
+                    dateFormat: "Y/m/d",
+                    disableMobile: true,
+                    locale: "ko",
+                    onOpen: function() {
+                        overlay.style.display = 'block';
+                    },
+                    onClose: function() {
+                        overlay.style.display = 'none';
+                    }
+                });
+            });
+        </script>
+    {% endif %}
+
+    <!-- 비밀번호 모달 추가 -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 id="modalTitle">인증 필요</h3>
+            <p>작업을 진행하려면 비밀번호를 입력하세요.</p>
+            <input type="password" id="passwordInput" class="password-input" placeholder="비밀번호 입력">
+            <div class="modal-buttons">
+                <button id="confirmButton" class="action-button">확인</button>
+                <button id="cancelButton" class="action-button cancel-button">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 모달 요소
+        const modal = document.getElementById('passwordModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const passwordInput = document.getElementById('passwordInput');
+        const confirmButton = document.getElementById('confirmButton');
+        const cancelButton = document.getElementById('cancelButton');
+        const closeButton = document.querySelector('.close');
+        const addTransactionContainer = document.getElementById('addTransactionContainer');
+        const deleteTransactionContainer = document.getElementById('deleteTransactionContainer');
+        const editTransactionContainer = document.getElementById('editTransactionContainer');
+        
+        // 현재 선택된 작업 (추가, 수정, 삭제)
+        let currentAction = '';
+        
+        // 인증 상태 확인
+        function checkAuthentication() {
+            return fetch('/check_auth')
+                .then(response => response.json())
+                .then(data => data.authenticated);
+        }
+        
+        // 모달 열기
+        function openModal() {
+            // 먼저 인증 상태 확인
+            checkAuthentication().then(authenticated => {
+                if (authenticated) {
+                    // 이미 인증된 경우 바로 작업 수행
+                    performAction();
+                } else {
+                    // 인증되지 않은 경우 모달 표시
+            modal.style.display = 'block';
+            passwordInput.value = '';
+            passwordInput.focus();
+                }
+            });
+        }
+        
+        // 모달 닫기
+        function closeModal() {
+            modal.style.display = 'none';
+        }
+        
+        // 확인 버튼 클릭 이벤트
+        confirmButton.addEventListener('click', function() {
+            loginAdmin();
+        });
+        
+        // 취소 버튼 클릭 이벤트
+        cancelButton.addEventListener('click', function() {
+            closeModal();
+        });
+        
+        // X 버튼 클릭 이벤트
+        closeButton.addEventListener('click', function() {
+            closeModal();
+        });
+        
+        // 모달 외부 클릭 시 닫기
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+        
+        // 비밀번호 입력 필드에서 엔터 키 처리
+        passwordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loginAdmin();
+            }
+        });
+        
+        // 서버에 로그인 요청
+        function loginAdmin() {
+            const formData = new FormData();
+            formData.append('password', passwordInput.value);
+            
+            fetch('/admin_login', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                closeModal();
+                performAction();
+            } else {
+                    alert(data.message);
+                passwordInput.value = '';
+                passwordInput.focus();
+            }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('로그인 중 오류가 발생했습니다.');
+            });
+        }
+        
+        // 작업 수행 함수
+        function performAction() {
+            const editTransactionId = document.getElementById('edit_transaction_id');
+            const editFormFields = document.getElementById('editFormFields');
+            const editFormButtons = document.getElementById('editFormButtons');
+
+            switch (currentAction) {
+                case 'add':
+                    // 추가 폼 표시
+                    if (addTransactionContainer) {
+                        addTransactionContainer.style.display = 'block';
+                        deleteTransactionContainer.style.display = 'none';
+                        editTransactionContainer.style.display = 'none';
+                        // 날짜 필드에 오늘 날짜 설정
+                        const dateField = document.getElementById('date');
+                        if (dateField && typeof flatpickr !== 'undefined') {
+                            const today = new Date();
+                            const year = today.getFullYear();
+                            const month = String(today.getMonth() + 1).padStart(2, '0');
+                            const day = String(today.getDate()).padStart(2, '0');
+                            dateField._flatpickr.setDate(`${year}/${month}/${day}`);
+                        }
+                    }
+                    break;
+                case 'delete':
+                    // 삭제 폼 표시
+                    if (deleteTransactionContainer) {
+                        deleteTransactionContainer.style.display = 'block';
+                        addTransactionContainer.style.display = 'none';
+                        editTransactionContainer.style.display = 'none';
+                    }
+                    break;
+                case 'edit':
+                    // 수정 폼 표시
+                    if (editTransactionContainer) {
+                        editTransactionContainer.style.display = 'block';
+                        addTransactionContainer.style.display = 'none';
+                        deleteTransactionContainer.style.display = 'none';
+                        // 폼 필드와 버튼 초기화
+                        editFormFields.style.display = 'none';
+                        editFormButtons.style.display = 'none';
+                        editTransactionId.value = '';
+                    }
+                    break;
+            }
+        }
+        
+        // 로그아웃 함수 (필요시 사용)
+        function logoutAdmin() {
+            fetch('/admin_logout', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('로그아웃되었습니다.');
+                    // 필요시 페이지 새로고침 또는 다른 작업 수행
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+        
+        // 페이지 로드 시 인증 상태 확인
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthentication().then(authenticated => {
+                console.log('인증 상태:', authenticated);
+                // 필요시 인증 상태에 따른 UI 변경
+            });
+        });
+    </script>
+{% endblock %} 

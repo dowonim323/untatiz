@@ -1,0 +1,565 @@
+{% extends "layout.html" %}
+
+{% block title %}G/BOAT{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+{% endblock %}
+
+{% block style %}
+.date-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.date-input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 80px;
+    text-align: center;
+}
+
+.date-label {
+    font-size: 14px;
+    color: #666;
+}
+
+.date-separator {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0 5px;
+}
+
+.calendar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.flatpickr-calendar {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+}
+
+.flatpickr-calendar:before,
+.flatpickr-calendar:after {
+    display: none;
+}
+
+.table-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.table-section {
+    width: 48%;
+    margin-top: 15px;
+}
+
+.mobile-gboat-tabs {
+    display: none;
+}
+
+.mobile-gboat-tab {
+    min-width: 0;
+}
+
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+th, td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+th {
+    background-color: #e0e0e0;
+    padding: 8px;
+    border-bottom: 1px solid #bdbdbd;
+    color: #333;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tr:hover {
+    background-color: #f0f0f0;
+}
+
+.goat-table th {
+    background-color: #e8f5e9;
+}
+
+.boat-table th {
+    background-color: #ffebee;
+}
+
+.goat-table tr:nth-child(even) {
+    background-color: #f1f8e9;
+}
+
+.boat-table tr:nth-child(even) {
+    background-color: #ffebee;
+}
+
+.goat-table tr:hover {
+    background-color: #c8e6c9;
+}
+
+.boat-table tr:hover {
+    background-color: #ffcdd2;
+}
+
+.table-section h2 {
+    margin: 10px 0;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.positive {
+    color: #4CAF50;
+}
+
+.negative {
+    color: #F44336;
+}
+
+.filter-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.filter-section {
+    margin: 5px 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    width: 100%;
+    max-width: 800px;
+}
+
+.filter-group {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 800px;
+}
+
+.filter-header {
+    background-color: #f5f5f5;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.toggle-all {
+    background-color: #e0e0e0;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.toggle-all:hover {
+    background-color: #d0d0d0;
+}
+
+.filter-content {
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.filter-item:hover {
+    background-color: #f0f0f0;
+}
+
+.no-data {
+    padding: 20px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+@media (max-width: 800px) {
+    .date-select {
+        justify-content: flex-start;
+    }
+
+    .mobile-gboat-tabs {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .mobile-gboat-tab {
+        flex: 1;
+        margin: 0;
+        min-height: 40px;
+    }
+
+    .date-input,
+    .toggle-all {
+        min-height: 40px;
+    }
+
+    .filter-content {
+        justify-content: flex-start;
+    }
+
+    .table-container {
+        flex-direction: column;
+    }
+
+    .table-section {
+        width: 100%;
+        margin-top: 0;
+    }
+
+    .table-section.is-hidden-mobile {
+        display: none;
+    }
+
+    .goat-table,
+    .boat-table {
+        min-width: 100%;
+        table-layout: fixed;
+    }
+
+    .goat-table th,
+    .goat-table td,
+    .boat-table th,
+    .boat-table td {
+        padding: 6px 4px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .goat-table th:nth-child(1),
+    .goat-table td:nth-child(1),
+    .boat-table th:nth-child(1),
+    .boat-table td:nth-child(1) {
+        width: 12%;
+    }
+
+    .goat-table th:nth-child(2),
+    .goat-table td:nth-child(2),
+    .boat-table th:nth-child(2),
+    .boat-table td:nth-child(2) {
+        width: 15%;
+    }
+
+    .goat-table th:nth-child(3),
+    .goat-table td:nth-child(3),
+    .boat-table th:nth-child(3),
+    .boat-table td:nth-child(3) {
+        width: 20%;
+    }
+
+    .goat-table th:nth-child(4),
+    .goat-table td:nth-child(4),
+    .boat-table th:nth-child(4),
+    .boat-table td:nth-child(4) {
+        width: 23%;
+    }
+
+    .goat-table th:nth-child(5),
+    .goat-table td:nth-child(5),
+    .boat-table th:nth-child(5),
+    .boat-table td:nth-child(5) {
+        width: 30%;
+    }
+}
+{% endblock %}
+
+{% block content %}
+    <!-- <h1>G/BOAT</h1> 제거 -->
+    
+    <div class="filter-container">
+        <div class="date-select">
+            <span class="date-label">조회 기간</span>
+            <input type="text" class="date-input" id="start-date" value="{{ start_date }}" readonly>
+            <span class="date-separator">~</span>
+            <input type="text" class="date-input" id="end-date" value="{{ end_date }}" readonly>
+        </div>
+        
+        <div class="filter-section">
+            <div class="filter-group">
+                <div class="filter-header">
+                    <h3>소속팀</h3>
+                    <button class="toggle-all" onclick="toggleAllTeams()">전체 선택/해제</button>
+                </div>
+                <div class="filter-content">
+                    {% for team in team_order %}
+                    <label class="filter-item">
+                        <input type="checkbox" class="team-checkbox" value="{{ team }}" 
+                               {% if team in selected_teams %}checked{% endif %}
+                               onchange="updateFilters()">
+                        <span>{{ team }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mobile-gboat-tabs" role="tablist" aria-label="G/BOAT 보기 전환">
+        <button type="button" class="subnav-button mobile-gboat-tab active" id="gboat-tab-goat" data-tab="goat" role="tab" aria-selected="true" aria-controls="goat-section">GOAT</button>
+        <button type="button" class="subnav-button mobile-gboat-tab" id="gboat-tab-boat" data-tab="boat" role="tab" aria-selected="false" aria-controls="boat-section" tabindex="-1">BOAT</button>
+    </div>
+    
+    <div class="table-container">
+        <div class="table-section" id="goat-section" role="tabpanel" aria-labelledby="gboat-tab-goat">
+            <h2>GOAT</h2>
+            <div class="table-scroll">
+                <table class="goat-table">
+                    <tr>
+                        <th>순위</th>
+                        <th>소속팀</th>
+                        <th>이름</th>
+                        <th>날짜</th>
+                        <th>WAR 변동</th>
+                    </tr>
+                    {% if selected_teams %}
+                        {% for row in goat_rows %}
+                        <tr>
+                            <td>{{ row['순위'] }}</td>
+                            <td>{{ row['소속팀'] }}</td>
+                            <td>{{ row['이름'] }}</td>
+                            <td>{{ row['날짜'] }}</td>
+                            <td class="positive">{{ row['WAR 변동'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="no-data">소속팀을 선택해주세요</td>
+                        </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+        
+        <div class="table-section" id="boat-section" role="tabpanel" aria-labelledby="gboat-tab-boat">
+            <h2>BOAT</h2>
+            <div class="table-scroll">
+                <table class="boat-table">
+                    <tr>
+                        <th>순위</th>
+                        <th>소속팀</th>
+                        <th>이름</th>
+                        <th>날짜</th>
+                        <th>WAR 변동</th>
+                    </tr>
+                    {% if selected_teams %}
+                        {% for row in boat_rows %}
+                        <tr>
+                            <td>{{ row['순위'] }}</td>
+                            <td>{{ row['소속팀'] }}</td>
+                            <td>{{ row['이름'] }}</td>
+                            <td>{{ row['날짜'] }}</td>
+                            <td class="negative">{{ row['WAR 변동'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="no-data">소속팀을 선택해주세요</td>
+                        </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="calendar-overlay" id="calendarOverlay"></div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 사용 가능한 날짜 배열
+            const availableDates = {{ available_dates|tojson }};
+            const overlay = document.getElementById('calendarOverlay');
+            const mobileTabButtons = document.querySelectorAll('.mobile-gboat-tab');
+            const mobileTabSections = {
+                goat: document.getElementById('goat-section'),
+                boat: document.getElementById('boat-section')
+            };
+            const mobileTabMediaQuery = window.matchMedia('(max-width: 800px)');
+
+            function setActiveMobileTab(tabName) {
+                mobileTabButtons.forEach(button => {
+                    const isActive = button.dataset.tab === tabName;
+                    button.classList.toggle('active', isActive);
+                    button.setAttribute('aria-selected', String(isActive));
+                    button.setAttribute('tabindex', isActive ? '0' : '-1');
+                });
+
+                Object.entries(mobileTabSections).forEach(([name, section]) => {
+                    const isActive = name === tabName;
+                    const shouldHide = mobileTabMediaQuery.matches && !isActive;
+
+                    section.classList.toggle('is-hidden-mobile', shouldHide);
+                    section.setAttribute('aria-hidden', String(shouldHide));
+                });
+            }
+
+            function syncMobileTabs() {
+                if (!mobileTabButtons.length) {
+                    return;
+                }
+
+                if (!mobileTabMediaQuery.matches) {
+                    Object.values(mobileTabSections).forEach(section => {
+                        section.classList.remove('is-hidden-mobile');
+                        section.setAttribute('aria-hidden', 'false');
+                    });
+                    return;
+                }
+
+                const activeButton = document.querySelector('.mobile-gboat-tab.active') || mobileTabButtons[0];
+                setActiveMobileTab(activeButton.dataset.tab);
+            }
+
+            mobileTabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    setActiveMobileTab(this.dataset.tab);
+                });
+            });
+
+            if (typeof mobileTabMediaQuery.addEventListener === 'function') {
+                mobileTabMediaQuery.addEventListener('change', syncMobileTabs);
+            } else {
+                mobileTabMediaQuery.addListener(syncMobileTabs);
+            }
+
+            syncMobileTabs();
+            
+            // 시작 날짜 선택기
+            flatpickr("#start-date", {
+                dateFormat: "m/d",
+                disableMobile: true,
+                locale: "ko",
+                enable: availableDates,
+                onOpen: function() {
+                    overlay.style.display = 'block';
+                },
+                onClose: function() {
+                    overlay.style.display = 'none';
+                },
+                onChange: function(selectedDates, dateStr) {
+                    const teams = getSelectedTeams();
+                    window.location.href = `/category/gboat?start_date=${dateStr}&end_date={{ end_date }}&teams=${teams}`;
+                }
+            });
+            
+            // 끝 날짜 선택기
+            flatpickr("#end-date", {
+                dateFormat: "m/d",
+                disableMobile: true,
+                locale: "ko",
+                enable: availableDates,
+                onOpen: function() {
+                    overlay.style.display = 'block';
+                },
+                onClose: function() {
+                    overlay.style.display = 'none';
+                },
+                onChange: function(selectedDates, dateStr) {
+                    const teams = getSelectedTeams();
+                    window.location.href = `/category/gboat?start_date={{ start_date }}&end_date=${dateStr}&teams=${teams}`;
+                }
+            });
+        });
+        
+        function getSelectedTeams() {
+            const teamCheckboxes = document.querySelectorAll('.team-checkbox');
+            const selectedTeams = [];
+            teamCheckboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedTeams.push(checkbox.value);
+                }
+            });
+            return selectedTeams.join(',');
+        }
+        
+        function updateFilters() {
+            const teams = getSelectedTeams();
+            window.location.href = `/category/gboat?start_date={{ start_date }}&end_date={{ end_date }}&teams=${teams}`;
+        }
+        
+        function toggleAllTeams() {
+            const teamCheckboxes = document.querySelectorAll('.team-checkbox');
+            const allChecked = Array.from(teamCheckboxes).every(checkbox => checkbox.checked);
+            
+            teamCheckboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+            
+            updateFilters();
+        }
+    </script>
+{% endblock %} 

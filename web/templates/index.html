@@ -1,0 +1,745 @@
+{% extends "layout.html" %}
+
+{% block title %}UNTATIZ{% endblock %}
+
+{% block style %}
+.update-container {
+    width: 100%; /* 전체 폭 사용 */
+    max-width: none; /* 최대 폭 제한 제거 */
+    padding: 0px 10px 20px 10px; /* 좌우 패딩 줄임 */
+    box-sizing: border-box; /* 패딩을 폭에 포함 */
+}
+
+.update-card {
+    flex: 3; /* 3/10 비율 */
+    min-width: 250px; /* 최소 폭 설정 */
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.update-time {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.update-status {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.status-label {
+    font-weight: bold;
+    margin-right: 10px;
+    min-width: 120px;
+}
+
+.status-value {
+    color: #2196F3;
+}
+
+.status-value.completed {
+    color: #4CAF50;
+}
+
+.status-value.pending {
+    color: #FF9800;
+}
+
+.games-container {
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+}
+
+.games-date {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #555;
+}
+
+.no-games {
+    font-style: italic;
+    color: #777;
+}
+
+.game-item {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.game-teams {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.team {
+    width: 35%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.team:first-child {
+    text-align: right;
+    padding-right: 10px;
+}
+
+.team:last-child {
+    text-align: left;
+    padding-left: 10px;
+}
+
+.game-score {
+    width: 30%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-width: 80px;
+}
+
+.home-score {
+    text-align: right;
+    width: 40%;
+}
+
+.score-divider {
+    width: 20%;
+    text-align: center;
+}
+
+.away-score {
+    text-align: left;
+    width: 40%;
+}
+
+.status {
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 리그 순위 표 스타일 수정 - league.html과 동일하게 */
+.league-standings {
+    flex: 7; /* 7/10 비율 */
+    min-width: 500px; /* 최소 폭 설정 */
+    margin-top: 10px;
+    padding-top: 0;
+    border-top: none;
+    box-sizing: border-box;
+    padding-right: 0px; /* 오른쪽 여백 제거 */
+}
+
+.league-standings h2 {
+    font-size: 16px;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.standings-table th {
+    background-color: #f5f5f5;
+    padding: 12px 15px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    font-weight: bold;
+    color: #555;
+}
+
+.standings-table td {
+    padding: 10px 15px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+}
+
+.standings-table tr:hover {
+    background-color: #f9f9f9;
+}
+
+.standings-table tr:last-child td {
+    border-bottom: none;
+}
+
+.team-name {
+    text-align: left;
+    font-weight: bold;
+}
+
+.war-cell, .change-cell {
+    position: relative;
+    width: 150px;
+    padding: 10px 15px;
+    overflow: hidden; /* 셀 내용이 넘치지 않도록 */
+}
+
+.war-bar, .change-bar {
+    position: absolute;
+    left: 10%; /* 좌측 10% 여백 */
+    top: 0;
+    width: 80%; /* 가운데 80% 영역만 사용 */
+    height: 100%;
+    z-index: 1;
+    transform-origin: left center; /* 왼쪽에서부터 변형 시작 */
+}
+
+.war-bar {
+    background-color: rgba(76, 175, 80, 0.2);
+    transform: scaleX(var(--scale)); /* 비율에 따라 크기 조절 */
+}
+
+.war-value, .change-value {
+    position: relative;
+    z-index: 2;
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+}
+
+/* 변화량 셀 너비 조정 */
+.change-cell {
+    width: 80px;
+}
+
+.view-more {
+    display: block;
+    text-align: right;
+    margin-top: 5px;
+    color: #2196F3;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.view-more:hover {
+    text-decoration: underline;
+}
+
+/* 테이블에 세로 줄 추가 */
+.standings-table th, .standings-table td {
+    border-right: 1px solid #eee;
+}
+
+.standings-table th:last-child, .standings-table td:last-child {
+    border-right: none;
+}
+
+/* 테이블 컬럼 너비 조정 */
+.standings-table th:nth-child(1), 
+.standings-table td:nth-child(1) {
+    width: 20%; /* 순위 컬럼 */
+}
+
+.standings-table th:nth-child(2), 
+.standings-table td:nth-child(2) {
+    width: 20%; /* 팀 컬럼 */
+}
+
+.standings-table th:nth-child(3), 
+.standings-table td:nth-child(3) {
+    width: 40%; /* WAR 컬럼 */
+}
+
+.standings-table th:nth-child(4), 
+.standings-table td:nth-child(4) {
+    width: 20%; /* 변화량 컬럼 */
+}
+
+/* WAR 셀과 변화량 셀 스타일 수정 */
+.war-cell {
+    position: relative;
+    width: 30%;
+    overflow: hidden;
+}
+
+.war-bar {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    width: 80%;
+    height: 100%;
+    background-color: rgba(76, 175, 80, 0.3);
+    z-index: 0;
+    transform-origin: left center;
+}
+
+.war-value {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: block;
+    text-align: center;
+    line-height: 39px;
+    padding: 0;
+}
+
+.change-cell {
+    position: relative;
+    width: 20%;
+    background: none !important;
+    padding: 0 !important;
+    height: 39px;
+}
+
+.change-bar {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    width: 80%;
+    height: 100%;
+    z-index: 0;
+}
+
+.change-value {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    display: block;
+    text-align: center;
+    line-height: 39px;
+    padding: 0;
+}
+
+/* 테이블 컨테이너와 데이터 테이블 스타일 추가 */
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box; /* 패딩을 폭에 포함 */
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #ddd;
+}
+
+.data-table th {
+    background-color: #f5f5f5;
+    padding: 6px 15px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    font-weight: bold;
+    color: #555;
+}
+
+.data-table td {
+    padding: 4px 15px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+}
+
+.data-table tr:hover {
+    background-color: #f9f9f9;
+}
+
+.data-table tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table td:nth-child(2) {
+    text-align: center;
+    font-weight: bold;
+}
+
+/* 컬럼 너비 조정 */
+.data-table th:nth-child(1), 
+.data-table td:nth-child(1) {
+    width: 20%; /* 순위 컬럼 */
+}
+
+.data-table th:nth-child(2), 
+.data-table td:nth-child(2) {
+    width: 20%; /* 팀 컬럼 */
+}
+
+.data-table th:nth-child(3), 
+.data-table td:nth-child(3) {
+    width: 40%; /* WAR 컬럼 */
+}
+
+.data-table th:nth-child(4), 
+.data-table td:nth-child(4) {
+    width: 20%; /* 변화량 컬럼 */
+}
+
+/* WAR 셀과 변화량 셀 높이 조정 */
+.war-cell, .change-cell {
+    height: 28px;
+}
+
+.war-value, .change-value {
+    line-height: 28px;
+}
+
+.data-table th, 
+.data-table td {
+    border-right: 1px solid #ddd;
+}
+
+.data-table th:last-child, 
+.data-table td:last-child {
+    border-right: none;
+}
+
+/* 업데이트 카드와 리그 순위 표 레이아웃 조정 - 3:7 비율 */
+.main-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 0px; /* 오른쪽 여백 제거 */
+}
+
+/* 반응형 레이아웃 */
+@media (max-width: 992px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .update-card, .league-standings {
+        width: 100%;
+    }
+}
+
+/* 뉴스 컨테이너 스타일 */
+.news-container {
+    margin-top: 15px;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.news-header {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.news-title {
+    display: block;
+    color: #2196F3;
+    text-decoration: none;
+    font-weight: normal;
+    margin-bottom: 5px;
+}
+
+.news-title:hover {
+    text-decoration: underline;
+}
+
+/* 뉴스 모달 스타일 */
+.news-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.news-modal-content {
+    background-color: #fefefe;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 700px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.news-modal-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #333;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+}
+
+.news-modal-body {
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    white-space: pre-line;
+}
+
+.close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: #333;
+}
+
+@media (max-width: 640px) {
+    .update-container {
+        padding: 0 0 16px;
+    }
+
+    .main-content {
+        gap: 16px;
+    }
+
+    .update-card,
+    .league-standings {
+        min-width: 0;
+    }
+
+    .update-card {
+        padding: 12px;
+    }
+
+    .update-status {
+        flex-wrap: wrap;
+        gap: 4px 8px;
+    }
+
+    .status-label {
+        min-width: 0;
+    }
+
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .data-table {
+        min-width: 100%;
+        table-layout: fixed;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 6px 4px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-table th:nth-child(1),
+    .data-table td:nth-child(1) {
+        width: 14%;
+    }
+
+    .data-table th:nth-child(2),
+    .data-table td:nth-child(2) {
+        width: 18%;
+    }
+
+    .data-table th:nth-child(3),
+    .data-table td:nth-child(3) {
+        width: 42%;
+    }
+
+    .data-table th:nth-child(4),
+    .data-table td:nth-child(4) {
+        width: 26%;
+    }
+
+    .war-cell,
+    .change-cell {
+        padding: 0 !important;
+        height: 32px;
+    }
+
+    .war-value,
+    .change-value {
+        line-height: 32px;
+    }
+
+    .war-bar,
+    .change-bar {
+        left: 6%;
+        width: 88%;
+    }
+
+    .news-modal-content {
+        width: calc(100% - 24px);
+        margin: 40px auto;
+        padding: 16px;
+    }
+}
+{% endblock %}
+
+{% block content %}
+    <div class="update-container">
+        {% if error %}
+            <div class="error-message">
+                {{ error }}
+            </div>
+        {% endif %}
+        
+        <div class="main-content">
+            <div class="update-card">
+                <div class="update-time">마지막 업데이트 : {{ update_time }}</div>
+                
+                {% if war_update_status %}
+                <div class="update-status">
+                    <span class="status-label">업데이트 상태:</span>
+                    <span class="status-value {% if war_update_status == '업데이트 완료' %}completed{% elif war_update_status in ['경기 시작 전', '경기 진행 중', '업데이트 대기 중'] %}pending{% endif %}">
+                        {{ war_update_status }}
+                    </span>
+                </div>
+                {% endif %}
+                
+                <div class="games-container">
+                    <div class="games-date">{{ games_date }}</div>
+                    
+                    {% if no_games %}
+                        <div class="no-games">{{ no_games }}</div>
+                    {% else %}
+                        {% for game in games %}
+                        <div class="game-item">
+                            <div class="game-teams">
+                                <span class="team">{{ game.home_team }}</span>
+                                <span class="game-score">
+                                    {% if game.is_score %}
+                                    <span class="home-score">{{ game.home_score }}</span>
+                                    <span class="score-divider">:</span>
+                                    <span class="away-score">{{ game.away_score }}</span>
+                                    {% else %}
+                                    <span class="status">{{ game.status }}</span>
+                                    {% endif %}
+                                </span>
+                                <span class="team">{{ game.away_team }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                
+                {% if current_news %}
+                <div class="news-container">
+                    <div class="news-header">오늘의 {{ league_name }}</div>
+                    <a href="#" class="news-title" id="homeNewsTrigger">
+                        {{ current_news.title }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if league_standings %}
+            <div class="league-standings">
+                <h2>리그 순위</h2>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">순위</th>
+                                <th style="width: 20%;">팀</th>
+                                <th style="width: 40%;">WAR</th>
+                                <th style="width: 20%;">변화량</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in league_standings %}
+                                <tr>
+                                    <td style="width: 20%;">{{ row['WAR_순위'] }}</td>
+                                    <td style="width: 20%;">{{ row['team'] }}</td>
+                                    <td style="width: 40%;" class="war-cell">
+                                        <div class="war-bar" style="transform: scaleX({{ row['WAR_비율'] / 100 }});"></div>
+                                        <span class="war-value">{{ row['WAR'] }}</span>
+                                    </td>
+                                    <td style="width: 20%;" class="change-cell">
+                                        <div class="change-bar" style="background-color: {{ row['변화량_색상'] }}"></div>
+                                        <span class="change-value">{{ row['변화량'] }}</span>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <a href="/category/league?sub=table&period=1" class="view-more">더 보기 →</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- 뉴스 모달 -->
+    <div id="newsModal" class="news-modal">
+        <div class="news-modal-content">
+            <span class="close-modal" id="closeNewsModal">&times;</span>
+            <div id="newsModalTitle" class="news-modal-title"></div>
+            <div id="newsModalContent" class="news-modal-body"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentNews = {% if current_news %}{{ current_news|tojson }}{% else %}null{% endif %};
+            const newsTrigger = document.getElementById('homeNewsTrigger');
+            const newsModal = document.getElementById('newsModal');
+            const closeButton = document.getElementById('closeNewsModal');
+            const newsModalTitle = document.getElementById('newsModalTitle');
+            const newsModalContent = document.getElementById('newsModalContent');
+
+            function openNewsModal(news) {
+                if (!news) {
+                    return;
+                }
+
+                newsModalTitle.textContent = news.title || '';
+                newsModalContent.textContent = news.content || news.body || '';
+                newsModal.style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeNewsModal() {
+                newsModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+
+            if (newsTrigger && currentNews) {
+                newsTrigger.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    openNewsModal(currentNews);
+                });
+            }
+
+            if (closeButton) {
+                closeButton.addEventListener('click', closeNewsModal);
+            }
+
+            if (newsModal) {
+                newsModal.addEventListener('click', function(event) {
+                    if (event.target === newsModal) {
+                        closeNewsModal();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && newsModal.style.display === 'block') {
+                    closeNewsModal();
+                }
+            });
+        });
+    </script>
+{% endblock %}

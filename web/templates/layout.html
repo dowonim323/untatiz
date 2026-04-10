@@ -1,0 +1,957 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% endblock %}</title>
+    <!-- 파비콘 링크 추가 -->
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    {% block head %}{% endblock %}
+    <!-- flatpickr CSS 추가 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        /* Google Fonts 추가 */
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        body.mobile-menu-open {
+            overflow: hidden;
+        }
+        .header-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            height: 54px; /* 36px의 1.5배 */
+            position: relative; /* 위치 지정 */
+            z-index: 20; /* 서브네비게이션바보다 높은 z-index */
+        }
+        .title {
+            display: flex;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: auto; /* 자동 너비로 변경 */
+        }
+        .title-text {
+            font-size: 28px;
+            font-weight: bold;
+            margin-right: 20px;
+            display: flex;
+            align-items: center;
+            height: 100%;
+            font-family: 'Montserrat', sans-serif; /* 전문적인 폰트 적용 */
+            letter-spacing: 1px; /* 글자 간격 조정 */
+            text-transform: uppercase; /* 대문자로 변환 */
+        }
+        .nav {
+            display: flex;
+            gap: 15px; /* 8px에서 15px로 간격 증가 */
+            margin: 0 auto;
+            padding: 0;
+            background-color: transparent;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            width: auto;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+        }
+        .current-time-container {
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            height: 100%;
+            width: auto; /* 자동 너비로 변경 */
+            justify-content: flex-end;
+            gap: 15px; /* 시즌 선택기와 시간 사이 간격 */
+        }
+        .season-selector {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .season-selector select {
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            min-height: 36px;
+        }
+        .season-selector select:hover {
+            border-color: #4CAF50;
+        }
+        .season-selector select:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .current-time {
+            font-size: 16px; /* 글자 크기 증가 */
+            color: #666;
+            cursor: pointer;
+            transition: color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            min-height: 36px;
+        }
+        .current-time:hover {
+            color: #4CAF50;
+        }
+        .nav-button {
+            padding: 0 15px; /* 좌우 패딩 증가 */
+            border: none;
+            border-radius: 4px;
+            background-color: #e0e0e0;
+            color: #333;
+            text-decoration: none;
+            font-size: 16px; /* 글자 크기 증가 */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            line-height: 45px; /* 높이와 동일하게 설정 */
+            height: 45px; /* 버튼 높이 증가 */
+            display: inline-block;
+            text-align: center;
+            white-space: nowrap; /* 텍스트 줄바꿈 방지 */
+        }
+        .nav-button:hover {
+            background-color: #d0d0d0;
+        }
+        .nav-button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .subnav {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0 30px 0;
+            padding: 10px;
+            background-color: #e8e8e8;
+            border-radius: 5px;
+            position: relative; /* 위치 지정 */
+            z-index: 10; /* 적절한 z-index 값 설정 */
+        }
+        .subnav-button {
+            padding: 6px 10px;
+            margin: 0 3px;
+            border: none;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+            color: #333;
+            text-decoration: none;
+            font-size: 12px; /* 글자 크기 축소 */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 32px;
+        }
+        .subnav-button:hover {
+            background-color: #d0d0d0;
+        }
+        .subnav-button.active {
+            background-color: #2196F3;
+            color: white;
+        }
+        .title-link {
+            text-decoration: none;
+            color: #333;
+            transition: color 0.2s, text-shadow 0.2s;
+        }
+        .title-link:hover {
+            color: #4CAF50;
+            text-shadow: 0 0 5px rgba(76, 175, 80, 0.3); /* 호버 시 텍스트 그림자 효과 */
+        }
+        #calendar {
+            display: none;
+            position: absolute;
+            right: 20px;
+            top: 50px;
+            background-color: white;
+            border: 1px solid #e6e6e6;
+            border-radius: 5px;
+            padding: 0;
+            box-shadow: 0 3px 13px rgba(0,0,0,0.08);
+            width: 170px;
+            max-width: calc(100vw - 24px);
+            font-size: 12px;
+            z-index: 1000;
+        }
+        
+        #calendar .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px;
+            border-bottom: 1px solid #e6e6e6;
+            background-color: #fff;
+        }
+        
+        #calendar .month-nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+        
+        #calendar .month-nav-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 3px 6px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        #calendar .month-nav-btn:hover {
+            color: #000;
+        }
+        
+        #calendar .month-label {
+            font-weight: bold;
+            margin: 0 6px;
+            font-size: 12px;
+        }
+        
+        #calendar .weekdays {
+            display: flex;
+            background-color: #fff;
+            border-bottom: 1px solid #e6e6e6;
+        }
+        
+        #calendar .weekday {
+            flex: 1;
+            text-align: center;
+            padding: 6px 0;
+            font-size: 10px;
+            color: #888;
+        }
+        
+        #calendar .weekday:first-child {
+            color: #e57373; /* 일요일 색상 */
+        }
+        
+        #calendar .weekday:last-child {
+            color: #64b5f6; /* 토요일 색상 */
+        }
+        
+        #calendar .days {
+            display: flex;
+            flex-wrap: wrap;
+            padding: 5px;
+        }
+        
+        #calendar .day {
+            width: calc(100% / 7);
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: default;
+            border-radius: 50%;
+            margin: 1px 0;
+            font-size: 11px;
+        }
+        
+        #calendar .day.current-month {
+            color: #333;
+        }
+        
+        #calendar .day.other-month {
+            color: #ccc;
+        }
+        
+        #calendar .day.today {
+            background-color: #e0f7fa;
+            font-weight: bold;
+        }
+        
+        #calendar .day.sunday {
+            color: #e57373;
+        }
+        
+        #calendar .day.saturday {
+            color: #64b5f6;
+        }
+        
+        #calendar .day.other-month.sunday,
+        #calendar .day.other-month.saturday {
+            color: #ddd;
+        }
+        /* 현재 달의 일요일 (첫 번째 열) */
+        .flatpickr-calendar .flatpickr-day.flatpickr-weekday-0:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay) {
+            color: #e57373 !important;
+        }
+        
+        /* 현재 달의 토요일 (마지막 열) */
+        .flatpickr-calendar .flatpickr-day.flatpickr-weekday-6:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay) {
+            color: #64b5f6 !important;
+        }
+        
+        /* 요일 이름 (일, 토) */
+        .flatpickr-calendar .flatpickr-weekday:nth-child(1) {
+            color: #e57373 !important;
+        }
+        
+        .flatpickr-calendar .flatpickr-weekday:nth-child(7) {
+            color: #64b5f6 !important;
+        }
+        /* 모든 일요일 */
+        .flatpickr-calendar .flatpickr-day[aria-label*="Sunday"] {
+            color: #e57373 !important;
+        }
+        
+        /* 모든 토요일 */
+        .flatpickr-calendar .flatpickr-day[aria-label*="Saturday"] {
+            color: #64b5f6 !important;
+        }
+        
+        /* 이전/다음 달 날짜 */
+        .flatpickr-calendar .flatpickr-day.prevMonthDay,
+        .flatpickr-calendar .flatpickr-day.nextMonthDay {
+            color: rgba(72, 72, 72, 0.3) !important;
+        }
+        
+        /* 선택 불가능한 날짜 */
+        .flatpickr-calendar .flatpickr-day.flatpickr-disabled,
+        .flatpickr-calendar .flatpickr-day.notAllowed {
+            color: rgba(72, 72, 72, 0.3) !important;
+        }
+        
+        /* 요일 이름 (일, 토) */
+        .flatpickr-calendar .flatpickr-weekday:first-child {
+            color: #e57373 !important;
+        }
+        
+        .flatpickr-calendar .flatpickr-weekday:last-child {
+            color: #64b5f6 !important;
+        }
+        
+        /* 이전/다음 달의 토요일과 일요일도 연한 회색으로 */
+        .flatpickr-calendar .flatpickr-day.prevMonthDay[aria-label*="Sunday"],
+        .flatpickr-calendar .flatpickr-day.nextMonthDay[aria-label*="Sunday"],
+        .flatpickr-calendar .flatpickr-day.prevMonthDay[aria-label*="Saturday"],
+        .flatpickr-calendar .flatpickr-day.nextMonthDay[aria-label*="Saturday"] {
+            color: rgba(72, 72, 72, 0.3) !important;
+        }
+        /* 현재 달의 일요일 (첫 번째 열) */
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day:not(.flatpickr-disabled):not(.notAllowed):not(.prevMonthDay):not(.nextMonthDay):nth-child(7n+1) {
+            color: #e57373 !important;
+        }
+        
+        /* 현재 달의 토요일 (마지막 열) */
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day:not(.flatpickr-disabled):not(.notAllowed):not(.prevMonthDay):not(.nextMonthDay):nth-child(7n) {
+            color: #64b5f6 !important;
+        }
+        
+        /* 선택 불가능한 날짜와 이전/다음 달 날짜는 회색으로 */
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day.flatpickr-disabled,
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day.notAllowed,
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day.prevMonthDay,
+        .flatpickr-calendar .flatpickr-days .dayContainer .flatpickr-day.nextMonthDay {
+            color: rgba(72, 72, 72, 0.3) !important;
+        }
+        
+        /* 요일 이름 (일, 토) */
+        .flatpickr-calendar .flatpickr-weekdays .flatpickr-weekday:first-child {
+            color: #e57373 !important;
+        }
+        
+        .flatpickr-calendar .flatpickr-weekdays .flatpickr-weekday:last-child {
+            color: #64b5f6 !important;
+        }
+        /* 반응형 디자인을 위한 미디어 쿼리 추가 */
+        @media (max-width: 1000px) {
+            .nav {
+                gap: 8px; /* 작은 화면에서는 간격 줄이기 */
+            }
+            
+            .nav-button {
+                padding: 0 10px; /* 좌우 패딩 줄이기 */
+                font-size: 14px; /* 글자 크기 줄이기 */
+            }
+        }
+        
+        /* 햄버거 메뉴 */
+        .hamburger {
+            display: none;
+            cursor: pointer;
+            padding: 10px;
+            color: #333;
+            background: none;
+            border: none;
+            appearance: none;
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 100;
+        }
+        .hamburger span {
+            display: block;
+            width: 24px;
+            height: 3px;
+            background-color: currentColor;
+            border-radius: 999px;
+            margin: 0;
+            flex: 0 0 auto;
+            pointer-events: none;
+            transition: 0.3s;
+        }
+
+        @media (max-width: 800px) {
+            body {
+                padding: 12px;
+            }
+
+            .header-container {
+                height: auto; /* 높이 자동 조정 */
+                flex-direction: column; /* 세로 방향으로 배치 */
+                align-items: flex-start;
+                gap: 10px;
+                padding: 12px 56px 12px 12px;
+                margin-bottom: 12px;
+            }
+            
+            .title {
+                width: 100%;
+                justify-content: flex-start;
+                margin-bottom: 0;
+            }
+
+            .title-text {
+                margin-right: 0;
+                font-size: 24px;
+            }
+            
+            .nav {
+                display: none; /* 모바일에서 기본 네비 숨김 */
+            }
+            
+            .hamburger {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                gap: 5px;
+                width: 44px;
+                height: 44px;
+                padding: 8px;
+                right: 6px;
+                top: 6px;
+                transform: none;
+            }
+            
+            .current-time-container {
+                width: 100%;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 0;
+            }
+            
+            .season-selector {
+                flex: 1 1 100%;
+            }
+
+            .season-selector select {
+                width: 100%;
+                min-height: 40px;
+            }
+
+            .current-time {
+                min-height: 40px;
+                font-size: 14px;
+            }
+
+            .subnav {
+                justify-content: flex-start;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding: 8px;
+                gap: 8px;
+                margin: 12px 0 20px 0;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .subnav.team-subnav {
+                justify-content: space-between;
+                flex-wrap: nowrap;
+                overflow-x: hidden;
+                padding: 8px 6px;
+                gap: 4px;
+            }
+
+            .subnav-button {
+                flex: 0 0 auto;
+                margin: 0;
+                min-height: 40px;
+                font-size: 13px;
+            }
+
+            .subnav.team-subnav .subnav-button {
+                flex: 1 1 0;
+                min-width: 0;
+                min-height: 36px;
+                padding: 7px 0;
+                font-size: clamp(11px, 3vw, 12.5px);
+                line-height: 1.1;
+            }
+
+            #calendar {
+                width: auto;
+                left: 12px;
+                right: 12px;
+                top: auto;
+            }
+
+            .mobile-menu .close-btn {
+                width: 36px;
+                height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+        
+        .mobile-menu {
+            position: fixed;
+            top: 0;
+            left: -100%;
+            width: 86%;
+            max-width: 320px;
+            height: 100vh;
+            background: #f5f5f5;
+            transition: left 0.3s ease;
+            z-index: 1001;
+            padding-top: 60px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            overflow-y: auto;
+        }
+        .mobile-menu.open {
+            left: 0;
+        }
+        .mobile-menu a {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            min-height: 48px;
+            border-bottom: 1px solid #ddd;
+            text-decoration: none;
+            color: #333;
+            font-size: 16px;
+        }
+        .mobile-menu a:hover, .mobile-menu a.active {
+            background: #4CAF50;
+            color: white;
+        }
+        .mobile-menu .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        .overlay.open {
+            display: block;
+        }
+        
+        /* 실시간 업데이트 알림 */
+        .update-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1a1a2e;
+            border: 1px solid #4CAF50;
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            color: white;
+        }
+        .update-notification button {
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+        }
+        .update-notification button:first-of-type {
+            background: #4CAF50;
+            color: white;
+        }
+        .update-notification button:last-of-type {
+            background: transparent;
+            color: #888;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @media (max-width: 640px) {
+            .update-notification {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+                width: auto;
+            }
+
+            .update-notification button {
+                min-height: 36px;
+            }
+        }
+        {% block style %}{% endblock %}
+    </style>
+</head>
+<body>
+    <!-- 모바일 메뉴 -->
+    <div class="overlay" id="overlay" onclick="toggleMobileMenu()"></div>
+    <div class="mobile-menu" id="mobileMenu">
+        <span class="close-btn" onclick="toggleMobileMenu()">&times;</span>
+        <a href="/category/league" class="{% if category == 'league' %}active{% endif %}">리그 순위</a>
+        <a href="/category/team" class="{% if category == 'team' %}active{% endif %}">팀별 기록</a>
+        <a href="/category/player" class="{% if category == 'player' %}active{% endif %}">선수별 기록</a>
+        <a href="/category/gboat" class="{% if category == 'gboat' %}active{% endif %}">G/BOAT</a>
+        <a href="/category/news" class="{% if category == 'news' %}active{% endif %}">뉴스</a>
+        <a href="/category/roster" class="{% if category == 'roster' %}active{% endif %}">팀 로스터</a>
+    </div>
+    
+    <div class="header-container">
+        <button type="button" class="hamburger" id="mobileMenuButton" aria-label="메뉴 열기" aria-controls="mobileMenu" aria-expanded="false" onclick="toggleMobileMenu()">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="title">
+            <div class="title-text">
+                <a href="/" class="title-link">UNTATIZ</a>
+            </div>
+            <div class="nav">
+                <a href="/category/league" class="nav-button {% if category == 'league' %}active{% endif %}">리그 순위</a>
+                <a href="/category/team" class="nav-button {% if category == 'team' %}active{% endif %}">팀별 기록</a>
+                <a href="/category/player" class="nav-button {% if category == 'player' %}active{% endif %}">선수별 기록</a>
+                <a href="/category/gboat" class="nav-button {% if category == 'gboat' %}active{% endif %}">G/BOAT</a>
+                <a href="/category/news" class="nav-button {% if category == 'news' %}active{% endif %}">뉴스</a>
+                <a href="/category/roster" class="nav-button {% if category == 'roster' %}active{% endif %}">팀 로스터</a>
+            </div>
+        </div>
+        <div class="current-time-container">
+            {% if all_seasons and all_seasons|length > 1 %}
+            <div class="season-selector">
+                <select id="seasonSelect" onchange="changeSeason(this.value)">
+                    {% for season in all_seasons %}
+                    <option value="{{ season.year }}" {% if season.year == current_season_year %}selected{% endif %}>
+                        {{ season.year }}시즌{% if season.is_active %} (현재){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="current-time" id="currentTime">
+                <!-- JavaScript로 현재 시간 표시 -->
+            </div>
+        </div>
+    </div>
+    {% if team_names %}
+    <div class="subnav{% if category == 'team' %} team-subnav{% endif %}">
+        {% for team in team_names %}
+        <a href="/category/team?team={{ team }}" 
+           class="subnav-button {% if selected_team == team %}active{% endif %}">
+            {{ team }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+    <div id="calendar"></div>
+    <!-- flatpickr JavaScript 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        // 현재 시간 표시 함수
+        function updateCurrentTime() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            
+            const formattedTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            document.getElementById('currentTime').textContent = formattedTime;
+        }
+        
+        // 페이지 로드 시 시간 표시 및 1초마다 업데이트
+        updateCurrentTime();
+        setInterval(updateCurrentTime, 1000);
+        
+        // 현재 표시 중인 연도와 월을 저장할 변수
+        let currentYear = new Date().getFullYear();
+        let currentMonth = new Date().getMonth();
+        
+        // 달력 렌더링 함수
+        function renderCalendar(year, month) {
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const today = new Date();
+            
+            // 이전 달의 마지막 날짜 계산
+            const prevMonthLastDay = new Date(year, month, 0).getDate();
+            
+            // 월 이름 배열
+            const monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+            
+            // 요일 이름 배열
+            const weekdayNames = ["일", "월", "화", "수", "목", "금", "토"];
+            
+            // 달력 헤더 생성
+            let calendarHTML = `
+                <div class="calendar-header">
+                    <div class="month-nav">
+                        <button class="month-nav-btn" onclick="changeMonth(-1)">&lt;</button>
+                        <span class="month-label">${year}년 ${monthNames[month]}</span>
+                        <button class="month-nav-btn" onclick="changeMonth(1)">&gt;</button>
+                    </div>
+                </div>
+                <div class="weekdays">
+            `;
+            
+            // 요일 헤더 추가
+            for (let i = 0; i < 7; i++) {
+                calendarHTML += `<div class="weekday">${weekdayNames[i]}</div>`;
+            }
+            
+            calendarHTML += `</div><div class="days">`;
+            
+            // 이전 달의 날짜 표시
+            for (let i = 0; i < firstDay.getDay(); i++) {
+                const prevDay = prevMonthLastDay - (firstDay.getDay() - i - 1);
+                calendarHTML += `<div class="day other-month ${i === 0 ? 'sunday' : ''} ${i === 6 ? 'saturday' : ''}">${prevDay}</div>`;
+            }
+            
+            // 현재 달의 날짜 표시
+            for (let i = 1; i <= lastDay.getDate(); i++) {
+                const dayOfWeek = (firstDay.getDay() + i - 1) % 7;
+                const isToday = i === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                const isSunday = dayOfWeek === 0;
+                const isSaturday = dayOfWeek === 6;
+                
+                calendarHTML += `<div class="day current-month ${isToday ? 'today' : ''} ${isSunday ? 'sunday' : ''} ${isSaturday ? 'saturday' : ''}">${i}</div>`;
+            }
+            
+            // 다음 달의 날짜 표시
+            const remainingDays = 42 - (firstDay.getDay() + lastDay.getDate()); // 6주 달력을 위한 계산
+            for (let i = 1; i <= remainingDays; i++) {
+                const dayOfWeek = (firstDay.getDay() + lastDay.getDate() + i - 1) % 7;
+                const isSunday = dayOfWeek === 0;
+                const isSaturday = dayOfWeek === 6;
+                
+                calendarHTML += `<div class="day other-month ${isSunday ? 'sunday' : ''} ${isSaturday ? 'saturday' : ''}">${i}</div>`;
+            }
+            
+            calendarHTML += `</div>`;
+            
+            return calendarHTML;
+        }
+        
+        // 월 변경 함수
+        function changeMonth(delta) {
+            currentMonth += delta;
+            
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+            
+            document.getElementById('calendar').innerHTML = renderCalendar(currentYear, currentMonth);
+            event.stopPropagation();
+        }
+        
+        // 달력 위치 업데이트 함수
+        function updateCalendarPosition() {
+            const calendar = document.getElementById('calendar');
+            if (calendar.style.display === 'block') {
+                const currentTimeElement = document.getElementById('currentTime');
+                const rect = currentTimeElement.getBoundingClientRect();
+                
+                calendar.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+                if (window.innerWidth <= 800) {
+                    calendar.style.left = '12px';
+                    calendar.style.right = '12px';
+                } else {
+                    calendar.style.left = 'auto';
+                    calendar.style.right = (window.innerWidth - rect.right) + 'px';
+                }
+            }
+        }
+        
+        // 창 크기 변경 이벤트 리스너 추가
+        window.addEventListener('resize', updateCalendarPosition);
+        
+        // 달력 토글 함수 수정
+        function toggleCalendar() {
+            const calendar = document.getElementById('calendar');
+            
+            if (calendar.style.display === 'none' || calendar.style.display === '') {
+                // 현재 날짜로 초기화
+                const now = new Date();
+                currentYear = now.getFullYear();
+                currentMonth = now.getMonth();
+                
+                // 달력 표시 및 렌더링
+                calendar.style.display = 'block';
+                calendar.innerHTML = renderCalendar(currentYear, currentMonth);
+                
+                // 위치 업데이트
+                updateCalendarPosition();
+            } else {
+                calendar.style.display = 'none';
+            }
+        }
+        
+        // 문서 클릭 시 달력 닫기
+        document.addEventListener('click', function(event) {
+            const calendar = document.getElementById('calendar');
+            const currentTime = document.getElementById('currentTime');
+            
+            if (event.target !== calendar && 
+                !calendar.contains(event.target) && 
+                event.target !== currentTime) {
+                calendar.style.display = 'none';
+            }
+        });
+        
+        // 현재 시각 클릭 시 달력 토글
+        document.getElementById('currentTime').addEventListener('click', function(event) {
+            toggleCalendar();
+            event.stopPropagation();
+        });
+        
+        // 시즌 변경 함수
+        function changeSeason(year) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('season', year);
+            // 날짜 관련 파라미터는 시즌 변경 시 리셋
+            url.searchParams.delete('date');
+            url.searchParams.delete('start_date');
+            url.searchParams.delete('end_date');
+            window.location.href = url.toString();
+        }
+        
+        // flatpickr 한국어 로케일 설정
+        flatpickr.localize({
+            weekdays: {
+                shorthand: ["일", "월", "화", "수", "목", "금", "토"],
+                longhand: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+            },
+            months: {
+                shorthand: ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"],
+                longhand: ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"]
+            },
+            firstDayOfWeek: 0 // 일요일부터 시작
+        });
+        
+        // 모바일 메뉴 토글
+        function toggleMobileMenu(forceOpen) {
+            const mobileMenu = document.getElementById('mobileMenu');
+            const overlay = document.getElementById('overlay');
+            const mobileMenuButton = document.getElementById('mobileMenuButton');
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !mobileMenu.classList.contains('open');
+
+            mobileMenu.classList.toggle('open', shouldOpen);
+            overlay.classList.toggle('open', shouldOpen);
+            document.body.classList.toggle('mobile-menu-open', shouldOpen);
+
+            if (mobileMenuButton) {
+                mobileMenuButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            }
+        }
+
+        document.querySelectorAll('#mobileMenu a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                toggleMobileMenu(false);
+            });
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                toggleMobileMenu(false);
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 800) {
+                toggleMobileMenu(false);
+            }
+        });
+        
+        // 실시간 상태 폴링
+        (function() {
+            const POLL_INTERVAL = 30000;
+            let lastWarStatus = null;
+            
+            async function pollStatus() {
+                try {
+                    const resp = await fetch('/api/status');
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    
+                    if (lastWarStatus && lastWarStatus !== 'completed' && data.war_status === 'completed') {
+                        showUpdateNotification();
+                    }
+                    lastWarStatus = data.war_status;
+                } catch (e) { }
+            }
+            
+            function showUpdateNotification() {
+                if (document.querySelector('.update-notification')) return;
+                const notification = document.createElement('div');
+                notification.className = 'update-notification';
+                notification.innerHTML = '<span>새 데이터가 있습니다</span>' +
+                    '<button onclick="window.location.reload()">새로고침</button>' +
+                    '<button onclick="this.parentElement.remove()">✕</button>';
+                document.body.appendChild(notification);
+            }
+            
+            setInterval(pollStatus, POLL_INTERVAL);
+            pollStatus();
+        })();
+    </script>
+</body>
+</html> 

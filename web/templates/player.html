@@ -1,0 +1,787 @@
+{% extends "layout.html" %}
+
+{% block title %}선수별 기록{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ko.js"></script>
+{% endblock %}
+
+{% block style %}
+.subnav {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.subnav-button {
+    padding: 8px 15px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0f0f0;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.subnav-button:hover {
+    background-color: #d0d0d0;
+}
+
+.subnav-button.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+.date-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.date-input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 80px;
+    text-align: center;
+    height: 36px;
+    box-sizing: border-box;
+}
+
+/* 달력 스타일 커스터마이징 */
+.flatpickr-day.disabled {
+    color: #ccc;
+    cursor: not-allowed;
+}
+
+.flatpickr-day.available {
+    background-color: #e8f5e9;
+}
+
+.flatpickr-day.available:hover {
+    background-color: #c8e6c9;
+}
+
+/* 달력 중앙 정렬 스타일 */
+.flatpickr-calendar {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin: 0 !important;
+}
+
+.flatpickr-calendar:before,
+.flatpickr-calendar:after {
+    display: none;
+}
+
+/* 달력 배경 오버레이 */
+.calendar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.flatpickr-calendar {
+    z-index: 1000;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+th, td {
+    padding: 8px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+th {
+    background-color: #e0e0e0;
+    padding: 8px;
+    border-bottom: 1px solid #bdbdbd;
+    color: #333;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tr:hover {
+    background-color: #f0f0f0;
+}
+
+.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 25px !important;
+    background-color: #e0e0e0;
+}
+
+.sortable:hover {
+    background-color: #d0d0d0;
+}
+
+.table-container {
+    margin-top: 20px;
+    max-height: none;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.search-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1;
+    gap: 10px;
+}
+
+.search-input {
+    padding: 8px;
+    width: 250px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    height: 36px;
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.search-button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #2196F3;
+    color: white;
+    cursor: pointer;
+    height: 36px;
+    box-sizing: border-box;
+}
+
+.search-button:hover {
+    background-color: #0b7dda;
+}
+
+.filter-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.top-filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 5px;
+}
+
+.filter-section {
+    margin: 5px 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    width: 100%;
+    max-width: 800px;
+}
+
+.filter-group {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 800px;
+}
+
+.filter-header {
+    background-color: #f5f5f5;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.filter-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.toggle-all {
+    background-color: #e0e0e0;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.toggle-all:hover {
+    background-color: #d0d0d0;
+}
+
+.filter-content {
+    padding: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.filter-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.filter-item span {
+    font-size: 14px;
+}
+
+.filter-item:hover {
+    background-color: #f0f0f0;
+}
+
+/* 소속팀 선택 메시지 스타일 */
+.no-team-selected {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    background-color: #f9f9f9;
+    border: none;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    width: 100%; /* 전체 너비 사용 */
+}
+
+.no-team-selected p {
+    font-size: 18px;
+    color: #666;
+    font-style: italic;
+    width: 100%; /* 전체 너비 사용 */
+}
+
+/* 소속팀 선택 메시지가 있는 행에 대한 스타일 */
+.table-container tr:has(.no-team-selected) {
+    width: 100%;
+}
+
+/* 소속팀 선택 메시지가 있는 셀에 대한 스타일 */
+.table-container td.no-team-selected {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* 테이블 레이아웃 고정 */
+.table-container table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+/* 각 컬럼 폭 지정 */
+.table-container th:nth-child(1) {
+    width: 10%; /* 순위 컬럼 */
+}
+
+.table-container th:nth-child(2) {
+    width: 30%; /* 이름 컬럼 */
+}
+
+.table-container th:nth-child(3) {
+    width: 20%; /* WAR 컬럼 */
+}
+
+.table-container th:nth-child(4) {
+    width: 15%; /* 구분 컬럼 */
+}
+
+.table-container th:nth-child(5) {
+    width: 25%; /* 소속팀 컬럼 */
+}
+
+/* 셀 내용 처리 */
+.table-container td, .table-container th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 8px 12px;
+}
+
+.no-team-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+    background-color: #f9f9f9;
+    border: none;
+    margin-top: 20px;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+    border-radius: 8px;
+}
+
+.no-team-message p {
+    font-size: 18px;
+    color: #666;
+    font-style: italic;
+}
+
+/* 상단 필터 영역 가로 배치 수정 */
+.top-filters {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 5px;
+}
+
+/* 타입 필터 너비 조정 */
+.type-filter {
+    width: 30%;
+}
+
+/* 팀 필터 너비 조정 */
+.team-filter {
+    width: 68%;
+}
+
+/* 소속팀 필터 콘텐츠 정렬 수정 */
+.team-filter-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+}
+
+/* 정렬 화살표 스타일 */
+.sort-arrow {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    color: #1976D2;
+    font-weight: bold;
+}
+
+/* 표 헤더 고정 스타일 */
+.data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: #e0e0e0;
+}
+
+@media (max-width: 800px) {
+    .top-filters {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .search-container {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .date-select {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .search-container {
+        flex-wrap: wrap;
+    }
+
+    .search-input {
+        width: 100%;
+        flex: 1 1 auto;
+    }
+
+    .search-button,
+    .toggle-all,
+    .date-input {
+        min-height: 40px;
+    }
+
+    .filter-content,
+    .team-filter-content {
+        justify-content: flex-start;
+    }
+
+    .filter-item {
+        min-height: 36px;
+    }
+
+    .search-button {
+        width: 100%;
+    }
+
+    .table-container th,
+    .table-container td {
+        padding: 6px 6px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+    }
+
+    .table-container .sortable {
+        padding-right: 18px !important;
+    }
+
+    .sort-arrow {
+        right: 6px;
+        font-size: clamp(12px, calc(8px + 1vw), 14px);
+    }
+
+    .table-container table {
+        min-width: 100%;
+    }
+
+    .table-container th:nth-child(1) {
+        width: 12%;
+    }
+
+    .table-container th:nth-child(2) {
+        width: 34%;
+    }
+
+    .table-container th:nth-child(3) {
+        width: 18%;
+    }
+
+    .table-container th:nth-child(4) {
+        width: 14%;
+    }
+
+    .table-container th:nth-child(5) {
+        width: 22%;
+    }
+}
+{% endblock %}
+
+{% block content %}
+    <div class="filter-container">
+        <div class="top-filters">
+            <div class="date-select">
+                <span class="date-label">날짜</span>
+                <input type="text" class="date-input" id="single-date" value="{{ date }}" readonly>
+            </div>
+            
+            <div class="search-container">
+                <input type="text" id="searchInput" class="search-input" placeholder="선수명 검색..." 
+                       value="{{ search_query }}">
+                <button onclick="search()" class="search-button">검색</button>
+            </div>
+        </div>
+        
+        <div class="filter-section">
+            <div class="filter-group">
+                <div class="filter-header">
+                    <h3>구분</h3>
+                </div>
+                <div class="filter-content">
+                    <label class="filter-item">
+                        <input type="checkbox" id="batCheck" 
+                               {% if 'bat' in selected_types %}checked{% endif %}
+                               onchange="updateFilters()">
+                        <span>타자</span>
+                    </label>
+                    <label class="filter-item">
+                        <input type="checkbox" id="pitCheck" 
+                               {% if 'pit' in selected_types %}checked{% endif %}
+                               onchange="updateFilters()">
+                        <span>투수</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="filter-section">
+            <div class="filter-group">
+                <div class="filter-header">
+                    <h3>소속팀</h3>
+                    <button class="toggle-all" onclick="toggleAllTeams()">전체 선택/해제</button>
+                </div>
+                <div class="filter-content team-filter-content">
+                    {% for team in team_order %}
+                    <label class="filter-item">
+                        <input type="checkbox" class="team-checkbox" value="{{ team }}" 
+                               {% if team in selected_teams %}checked{% endif %}
+                               onchange="updateFilters()">
+                        <span>{{ team }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% if selected_date %}
+                        <th class="sortable" onclick="toggleSort('war_rank')">
+                            순위
+                            {% if sort_by == 'war_rank' or sort_by == selected_date %}
+                                <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </th>
+                    {% endif %}
+                    <th class="sortable" onclick="toggleSort('Name')">
+                        이름
+                        {% if sort_by == 'Name' %}
+                            <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                        {% endif %}
+                    </th>
+                    <th class="sortable" onclick="toggleSort('team')">
+                        팀
+                        {% if sort_by == 'team' %}
+                            <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                        {% endif %}
+                    </th>
+                    <th class="sortable" onclick="toggleSort('type')">
+                        구분
+                        {% if sort_by == 'type' %}
+                            <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                        {% endif %}
+                    </th>
+                    {% if selected_date %}
+                        <th class="sortable" onclick="toggleSort('{{ selected_date }}')">
+                            WAR
+                            {% if sort_by == selected_date or sort_by == 'war_rank' %}
+                                <span class="sort-arrow">{% if sort_order == 'asc' %}▲{% else %}▼{% endif %}</span>
+                            {% endif %}
+                        </th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        {% if selected_date %}
+                            <td>{{ row['war_rank'] }}</td>
+                        {% endif %}
+                        <td>{{ row['Name'] }}</td>
+                        <td>{{ row['team'] }}</td>
+                        <td>{{ row['type'] }}</td>
+                        {% if selected_date %}
+                            <td>{{ row[selected_date] }}</td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if selected_teams|length == 0 %}
+        <div class="no-team-message">
+            <p><i>소속팀을 선택해주세요</i></p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="calendar-overlay" id="calendarOverlay"></div>
+    
+    <script>
+        function toggleSort(column) {
+            // 현재 URL 파라미터 가져오기
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // 순위 컬럼 클릭 시 WAR 기준으로 정렬하도록 변경
+            let sortColumn = column;
+            if (column === 'war_rank') {
+                sortColumn = '{{ selected_date }}';
+            }
+            
+            // 현재 정렬 상태 확인
+            const currentSort = urlParams.get('sort') || 'war_rank';
+            const currentOrder = urlParams.get('order') || 'desc';
+            
+            // 새로운 정렬 방향 결정
+            let newOrder = 'desc';
+            
+            // 팀과 이름 컬럼은 첫 클릭 시 오름차순, 다시 클릭 시 내림차순
+            if ((column === 'team' || column === 'Name') && currentSort !== column) {
+                newOrder = 'asc';
+            } 
+            // WAR나 순위 컬럼은 첫 클릭 시 오름차순(기본이 내림차순이므로), 다시 클릭 시 내림차순
+            else if ((column === 'war_rank' || column === '{{ selected_date }}') && 
+                     (currentSort === '{{ selected_date }}' || currentSort === 'war_rank') && 
+                     currentOrder === 'desc') {
+                newOrder = 'asc';
+            }
+            // 그 외 컬럼이나 이미 정렬된 컬럼은 정렬 방향 전환
+            else if (currentSort === sortColumn) {
+                newOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+            }
+            
+            // 현재 URL에서 정렬 파라미터만 변경
+            urlParams.set('sort', sortColumn);
+            urlParams.set('order', newOrder);
+            
+            // 새 URL 생성 및 페이지 이동
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            window.location.href = newUrl;
+        }
+        
+        function updateFilters() {
+            // 선택된 타입 가져오기
+            const batCheck = document.getElementById('batCheck').checked;
+            const pitCheck = document.getElementById('pitCheck').checked;
+            
+            let types = [];
+            if (batCheck) types.push('bat');
+            if (pitCheck) types.push('pit');
+            
+            // 선택된 팀 가져오기
+            const teamCheckboxes = document.querySelectorAll('.team-checkbox');
+            let teams = [];
+            teamCheckboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    teams.push(checkbox.value);
+                }
+            });
+            
+            // 현재 URL 가져오기
+            const url = new URL(window.location.href);
+            
+            // 파라미터 설정
+            url.searchParams.set('types', types.join(','));
+            url.searchParams.set('teams', teams.join(','));
+            
+            // 페이지 이동
+            window.location.href = url.toString();
+        }
+        
+        function search() {
+            const searchInput = document.getElementById('searchInput');
+            const searchQuery = searchInput.value.trim();
+            
+            // 현재 URL 가져오기
+            const url = new URL(window.location.href);
+            
+            // 검색어 파라미터 설정
+            if (searchQuery) {
+                url.searchParams.set('search', searchQuery);
+            } else {
+                url.searchParams.delete('search');
+            }
+            
+            // 페이지 이동
+            window.location.href = url.toString();
+        }
+        
+        function toggleAllTeams() {
+            const teamCheckboxes = document.querySelectorAll('.team-checkbox');
+            const allChecked = Array.from(teamCheckboxes).every(checkbox => checkbox.checked);
+            
+            teamCheckboxes.forEach(checkbox => {
+                checkbox.checked = !allChecked;
+            });
+            
+            updateFilters();
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // 사용 가능한 날짜 배열
+            const availableDates = {{ available_dates|tojson }};
+            const overlay = document.getElementById('calendarOverlay');
+            
+            // flatpickr 설정
+            flatpickr("#single-date", {
+                dateFormat: "Y-m-d",
+                altInput: true,
+                altFormat: "m/d",
+                disableMobile: true,
+                locale: "ko",
+                onOpen: function() {
+                    overlay.style.display = 'block';
+                },
+                onClose: function() {
+                    overlay.style.display = 'none';
+                },
+                // 데이터가 있는 날짜만 선택 가능하도록 설정
+                enable: availableDates,
+                // 사용 가능한 날짜 강조 표시
+                onDayCreate: function(dObj, dStr, fp, dayElem) {
+                    const isoDate = dayElem.dateObj.toISOString().slice(0, 10);
+                    if (availableDates.includes(isoDate)) {
+                        dayElem.classList.add('available');
+                    }
+                },
+                onChange: function(selectedDates, dateStr) {
+                    // 날짜 선택 시 페이지 이동
+                    const urlParams = new URLSearchParams(window.location.search);
+                    urlParams.set('date', dateStr);
+                    
+                    // 기존 파라미터 유지
+                    const teams = urlParams.get('teams');
+                    const types = urlParams.get('types');
+                    const sort = urlParams.get('sort');
+                    const order = urlParams.get('order');
+                    const search = urlParams.get('search');
+                    
+                    let url = `/category/player?date=${dateStr}`;
+                    if (teams) url += `&teams=${teams}`;
+                    if (types) url += `&types=${types}`;
+                    if (sort) url += `&sort=${sort}`;
+                    if (order) url += `&order=${order}`;
+                    if (search) url += `&search=${search}`;
+                    
+                    window.location.href = url;
+                }
+            });
+            
+            // 검색 입력 필드에서 엔터 키 처리
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        search();
+                    }
+                });
+            }
+        });
+    </script>
+{% endblock %} 

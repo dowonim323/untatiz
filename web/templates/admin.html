@@ -1,0 +1,412 @@
+{% extends "layout.html" %}
+
+{% block title %}관리자 - UNTATIZ{% endblock %}
+
+{% block style %}
+<style>
+    .admin-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .admin-section {
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .admin-section h2 {
+        margin-top: 0;
+        color: #333;
+        border-bottom: 2px solid #4CAF50;
+        padding-bottom: 10px;
+    }
+
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+        background-color: white;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .admin-table th {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+    }
+
+    .admin-table tr:hover {
+        background-color: #f5f5f5;
+    }
+
+    .admin-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        transition: background-color 0.3s;
+    }
+
+    .btn-primary {
+        background-color: #2196F3;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background-color: #0b7dda;
+    }
+
+    .btn-danger {
+        background-color: #f44336;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background-color: #da190b;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin: 15px 0;
+    }
+
+    .stat-card {
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        text-align: center;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+    }
+
+    .stat-value {
+        font-size: 28px;
+        font-weight: bold;
+        color: #4CAF50;
+    }
+
+    .loading {
+        text-align: center;
+        color: #999;
+        padding: 20px;
+    }
+
+    .error {
+        background-color: #ffebee;
+        color: #c62828;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 10px 0;
+        display: none;
+    }
+
+    .success {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        padding: 12px;
+        border-radius: 4px;
+        margin: 10px 0;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <h1>관리자 대시보드</h1>
+
+    <!-- 시즌 관리 섹션 -->
+    <section class="admin-section">
+        <h2>시즌 관리</h2>
+        
+        <div id="seasonMessage" class="success"></div>
+        <div id="seasonError" class="error"></div>
+
+        <table class="admin-table">
+            <tr><th>연도</th><th>상태</th><th>액션</th></tr>
+            {% for s in seasons %}
+            <tr>
+                <td>{{ s.year }}시즌</td>
+                <td>{% if s.is_active %}<span style="color: #4CAF50; font-weight: bold;">활성</span>{% else %}-{% endif %}</td>
+                <td>
+                    {% if not s.is_active %}
+                    <button class="btn btn-primary" onclick="activateSeason({{ s.id }}, {{ s.year }})">활성화</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <h3>새 시즌 생성</h3>
+        <form id="createSeasonForm" onsubmit="createSeason(event)" style="display: flex; gap: 10px; align-items: center;">
+            <input type="number" name="year" placeholder="2026" min="2020" max="2050" required style="padding: 8px; width: 100px;">
+            <button type="submit" class="btn btn-primary">생성</button>
+        </form>
+    </section>
+
+    <!-- 드래프트 업로드 섹션 -->
+    <section class="admin-section">
+        <h2>드래프트 업로드</h2>
+        
+        <div id="draftMessage" class="success"></div>
+        <div id="draftError" class="error"></div>
+
+        <form id="uploadDraftForm" onsubmit="uploadDraft(event)" enctype="multipart/form-data">
+            <input type="file" name="draft_file" accept=".json" required style="margin-bottom: 10px;">
+            <br>
+            <button type="submit" class="btn btn-primary">업로드</button>
+        </form>
+        <div id="uploadResult" style="margin-top: 10px;"></div>
+    </section>
+
+    <!-- 캐시 관리 섹션 -->
+    <section class="admin-section">
+        <h2>캐시 관리</h2>
+        
+        <div id="cacheMessage" class="success"></div>
+        <div id="cacheError" class="error"></div>
+
+        <!-- 통계 카드 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">전체 항목</div>
+                <div class="stat-value" id="totalEntries">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">활성 항목</div>
+                <div class="stat-value" id="activeEntries">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">만료된 항목</div>
+                <div class="stat-value" id="expiredEntries">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">네임스페이스</div>
+                <div class="stat-value" id="namespaceCount">-</div>
+            </div>
+        </div>
+
+        <!-- 네임스페이스 상세 -->
+        <h3>네임스페이스별 항목 수</h3>
+        <div id="cacheStats" class="loading">로딩 중...</div>
+
+        <!-- 버튼 그룹 -->
+        <div class="button-group">
+            <button class="btn btn-primary" onclick="refreshCacheStats()">통계 새로고침</button>
+            <button class="btn btn-danger" onclick="clearCache()">캐시 전체 삭제</button>
+        </div>
+    </section>
+</div>
+
+<script>
+async function refreshCacheStats() {
+    try {
+        const resp = await fetch('/admin/cache/stats');
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        
+        const stats = await resp.json();
+        
+        // 통계 카드 업데이트
+        document.getElementById('totalEntries').textContent = stats.total_entries || 0;
+        document.getElementById('activeEntries').textContent = stats.active_entries || 0;
+        document.getElementById('expiredEntries').textContent = stats.expired_entries || 0;
+        document.getElementById('namespaceCount').textContent = Object.keys(stats.namespaces || {}).length;
+        
+        // 네임스페이스 테이블 생성
+        let html = '<table class="admin-table">';
+        html += '<tr><th>네임스페이스</th><th>항목 수</th></tr>';
+        
+        const namespaces = stats.namespaces || {};
+        if (Object.keys(namespaces).length === 0) {
+            html += '<tr><td colspan="2" style="text-align: center; color: #999;">캐시 항목이 없습니다.</td></tr>';
+        } else {
+            for (const [ns, count] of Object.entries(namespaces).sort()) {
+                html += `<tr><td>${escapeHtml(ns)}</td><td>${count}</td></tr>`;
+            }
+        }
+        
+        html += '</table>';
+        document.getElementById('cacheStats').innerHTML = html;
+        
+        // 메시지 숨기기
+        document.getElementById('cacheMessage').style.display = 'none';
+        document.getElementById('cacheError').style.display = 'none';
+    } catch (error) {
+        console.error('캐시 통계 로드 실패:', error);
+        document.getElementById('cacheError').textContent = '캐시 통계를 로드할 수 없습니다: ' + error.message;
+        document.getElementById('cacheError').style.display = 'block';
+    }
+}
+
+async function clearCache() {
+    if (!confirm('정말로 캐시를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/admin/cache/invalidate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        
+        const data = await resp.json();
+        
+        if (data.success) {
+            document.getElementById('cacheMessage').textContent = data.message;
+            document.getElementById('cacheMessage').style.display = 'block';
+            document.getElementById('cacheError').style.display = 'none';
+            
+            // 통계 새로고침
+            setTimeout(refreshCacheStats, 500);
+        } else {
+            throw new Error(data.message || '캐시 삭제 실패');
+        }
+    } catch (error) {
+        console.error('캐시 삭제 실패:', error);
+        document.getElementById('cacheError').textContent = '캐시 삭제 실패: ' + error.message;
+        document.getElementById('cacheError').style.display = 'block';
+        document.getElementById('cacheMessage').style.display = 'none';
+    }
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// 페이지 로드 시 통계 로드
+document.addEventListener('DOMContentLoaded', refreshCacheStats);
+
+// 시즌 관리 함수
+async function createSeason(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    try {
+        const resp = await fetch('/admin/season/create', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+            document.getElementById('seasonMessage').textContent = data.message;
+            document.getElementById('seasonMessage').style.display = 'block';
+            document.getElementById('seasonError').style.display = 'none';
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        document.getElementById('seasonError').textContent = error.message;
+        document.getElementById('seasonError').style.display = 'block';
+        document.getElementById('seasonMessage').style.display = 'none';
+    }
+}
+
+async function activateSeason(seasonId, year) {
+    if (!confirm(`${year}시즌을 활성화하시겠습니까?`)) return;
+    
+    try {
+        const resp = await fetch(`/admin/season/${seasonId}/activate`, {method: 'POST'});
+        const data = await resp.json();
+        
+        if (data.success) {
+            document.getElementById('seasonMessage').textContent = data.message;
+            document.getElementById('seasonMessage').style.display = 'block';
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        document.getElementById('seasonError').textContent = error.message;
+        document.getElementById('seasonError').style.display = 'block';
+    }
+}
+
+// 드래프트 업로드 함수
+async function uploadDraft(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    document.getElementById('uploadResult').innerHTML = '<div class="loading">업로드 중...</div>';
+    
+    try {
+        const resp = await fetch('/admin/draft/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+            document.getElementById('draftMessage').textContent = data.message;
+            document.getElementById('draftMessage').style.display = 'block';
+            document.getElementById('draftError').style.display = 'none';
+            
+            let resultHtml = `<p><strong>등록:</strong> ${data.inserted}명, <strong>스킵:</strong> ${data.skipped}명</p>`;
+            if (data.warnings && data.warnings.length > 0) {
+                resultHtml += '<p><strong>경고:</strong></p><ul>';
+                data.warnings.forEach(w => resultHtml += `<li>${escapeHtml(w)}</li>`);
+                resultHtml += '</ul>';
+            }
+            document.getElementById('uploadResult').innerHTML = resultHtml;
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        document.getElementById('draftError').textContent = error.message;
+        document.getElementById('draftError').style.display = 'block';
+        document.getElementById('draftMessage').style.display = 'none';
+        document.getElementById('uploadResult').innerHTML = '';
+    }
+}
+</script>
+{% endblock %}
