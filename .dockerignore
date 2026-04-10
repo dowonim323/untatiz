@@ -1,0 +1,70 @@
+# Docker ignore patterns
+# 빌드 컨텍스트에서 제외할 파일들
+
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs (컨테이너 내부에서 생성)
+log/
+*.log
+
+# Database (볼륨으로 마운트)
+db/
+*.db
+*.sqlite3
+
+# API credentials (환경변수로 주입)
+api/
+
+# Graph outputs (볼륨으로 마운트)
+graph/
+
+# News data (볼륨으로 마운트)
+news/
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+*_test.py
+test_*.py
+tests/
+
+# Conda environment (Docker에서 requirements.txt 사용)
+*.yaml
+*.yml
+!docker-compose.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Docker files (자기 자신 제외)
+Dockerfile
+docker-compose.yml
+.dockerignore

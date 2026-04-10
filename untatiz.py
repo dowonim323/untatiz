@@ -20,8 +20,22 @@ from openpyxl import load_workbook
 import re
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+import sqlite3
+from stem import Signal
+from stem.control import Controller
+import json
+from fake_useragent import UserAgent
 
 os.environ['WDM_LOG'] = '0'
+
+# 자격 증명 정보 로드
+try:
+    with open("api/credentials.json", "r") as f:
+        credentials = json.load(f)
+        TOR_PASSWORD = credentials["tor"]["password"]
+except Exception as e:
+    print(f"Error loading credentials: {str(e)}")
+    TOR_PASSWORD = None  # 로드 실패 시 None으로 설정
 
 # 로그 파일 경로 설정
 log_directory = "/home/ubuntu/untatiz/log/"
@@ -33,6 +47,8 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] %(message)s',
                     handlers=[logging.FileHandler(log_path),
                               logging.StreamHandler(sys.stdout)])
+
+logging.getLogger("stem").setLevel(logging.ERROR)
 
 # stdout과 stderr 리디렉션 설정
 class StreamToLogger:
@@ -52,6 +68,58 @@ class StreamToLogger:
 sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
 sys.stderr = StreamToLogger(logging.getLogger('STDERR'), logging.ERROR)
 
+def changeIP():
+    try:
+        if TOR_PASSWORD is None:
+            raise ValueError("Tor password not loaded")
+            
+        with Controller.from_port(port = 9051) as controller:
+            controller.authenticate(password=TOR_PASSWORD)
+            controller.signal(Signal.NEWNYM)
+            
+            while not controller.is_newnym_available():
+                time.sleep(controller.get_newnym_wait() + 1)
+            
+            # Get and print the new IP address
+            session = requests.session()
+            session.proxies = {'http': 'socks5://127.0.0.1:9050', 'https': 'socks5://127.0.0.1:9050'}
+            response = session.get('https://httpbin.org/ip')
+            new_ip = response.json()['origin']
+            print(f"IP switched to: {new_ip}")
+
+    except Exception as e:
+        print(f"Error changing IP: {str(e)}")
+
+def load_table(table_name):
+    """
+    Load a table from untatiz_db.db as a pandas DataFrame
+    
+    Args:
+        table_name (str): Name of the table to load from SQLite database
+        
+    Returns:
+        pandas.DataFrame: DataFrame containing the table data
+        
+    Raises:
+        ValueError: If table_name does not exist in the database
+    """
+    import sqlite3
+    
+    conn = sqlite3.connect("/home/ubuntu/untatiz/db/untatiz_db.db")
+    cursor = conn.cursor()
+    
+    # Get list of tables in database
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [table[0] for table in cursor.fetchall()]
+    
+    if table_name not in tables:
+        conn.close()
+        raise ValueError(f"Table '{table_name}' does not exist in database")
+        
+    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+    conn.close()
+    return df
+
 # KST 시간을 기준으로 날짜를 반환하는 함수
 def get_date():
     kst = pytz.timezone('Asia/Seoul')
@@ -62,19 +130,15 @@ def get_date():
         date_to_display = now
     return date_to_display.strftime('%m/%d')
 
-# 구글 스프레드시트 로드 함수
-def load_gspread(json_path, url):
-    gc = gspread.service_account(json_path)
-    return gc.open_by_url(url)
-
 # 데이터 로드 함수
 def load_data():
-    player_name = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
-    player_id = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
-    transaction = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="transaction")
+    player_name = load_table("draft_name")
+    player_id = load_table("draft_id")
+    player_transaction = load_table("player_transaction")
 
     player_id = player_id.astype('str')
-    transaction = transaction.astype('str')
+    player_transaction = player_transaction.astype('str')
+    player_transaction["WAR"] = player_transaction["WAR"].astype(float)
 
     player_name = player_name.set_index("팀")
     player_id = player_id.set_index("팀")
@@ -85,12 +149,12 @@ def load_data():
     war_basis = player_id.copy()
     war_basis.loc[:, :] = 0
 
-    for index in transaction.index:
-        name = transaction.iloc[index]["name"]
-        id = transaction.iloc[index]["id"]
-        old = transaction.iloc[index]["old"].lstrip("팀 ")
-        new = transaction.iloc[index]["new"].lstrip("팀 ")
-        war = float(transaction.iloc[index]["WAR"])
+    for index in player_transaction.index:
+        name = player_transaction.iloc[index]["name"]
+        id = player_transaction.iloc[index]["id"]
+        old = player_transaction.iloc[index]["old"].lstrip("팀 ")
+        new = player_transaction.iloc[index]["new"].lstrip("팀 ")
+        war = float(player_transaction.iloc[index]["WAR"])
 
         if old != "퐈":
             data = player_id.loc[old]
@@ -123,145 +187,27 @@ def load_data():
                 player_activation.loc[new, new_position] = True
                 war_basis.loc[new, new_position] = war
 
-    return player_name, player_id, player_activation, war_basis, transaction
-
-# 플레이어 ID 검색 함수
-def get_player_id(driver, name):
-    driver.get("https://statiz.sporki.com/player/?m=search&s=" + name)
-    html = driver.page_source
-    bsObject = BeautifulSoup(html, 'html.parser')
-    if bool(re.search(r'p_no=\d+$', driver.current_url)):
-        return driver.current_url.split('p_no=')[-1]
-    temp = bsObject.find_all("table")[0]
-    templen = len(temp.find_all("tr"))
-    if temp.find_all("tr")[1].text == '검색된 선수가 없습니다.':
-        return "0"
-    for i in range(1, templen):
-        tempTr = temp.find_all("tr")[i]
-        if tempTr.find("th") is not None:
-            continue
-    return "검색 필요"
-
-# 플레이어 이름 검색 함수
-def get_player_name(driver, id):
-    driver.get("https://statiz.sporki.com/player/?m=playerinfo&p_no=" + id)
-    html = driver.page_source
-    bsObject = BeautifulSoup(html, 'html.parser')
-    name_element = bsObject.select_one("body > div.warp > div.container > section > div.player_info_header > div.bio > div.p_info > div.name")
-    if name_element:
-        full_name = name_element.text.strip()
-        korean_name = re.split(r'\s*\(\s*', full_name)[0]
-        return korean_name
-    return None
-
-# ntfy 알림 함수
-def ntfy(data):
-    url = 'http://ntfy.dowonim.com/untatiz'
-    headers = {
-        'Content-Type': 'text/plain',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    requests.post(url, data=data, headers=headers)
-
-# ID 업데이트 함수
-def update_id(driver):
-    player_name = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_name")
-    player_id = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="player_id")
-    transaction = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="transaction").replace(np.nan, "")
-
-    transaction["WAR"] = transaction["WAR"].astype(float)
-    transaction["WAR"] = transaction["WAR"].apply(lambda x: f"{x:.2f}")
-    transaction = transaction.astype(str)
-
-    player_id = player_id.astype('str')
-    transaction = transaction.astype('str')
-
-    player_name = player_name.set_index("팀")
-    player_id = player_id.set_index("팀")
-
-    error_state = 0
-
-    id_to_name = player_id.copy()
-
-    for i in range(0, id_to_name.shape[0]):
-        for j in range(0, id_to_name.shape[1]):
-            id = id_to_name.iat[i, j]
-            if id:  # Ensure the cell is not empty
-                name = get_player_name(driver, id)
-                id_to_name.iat[i, j] = name
-
-    for team in player_name.index:
-        for column in player_name.columns:
-            if player_name.loc[team, column] != id_to_name.loc[team, column]:
-                if player_id.loc[team, column] == "0":
-                    name = player_name.loc[team, column]
-                    driver.get("https://statiz.sporki.com/player/?m=search&s=" + name)
-                    html = driver.page_source
-                    bsObject = BeautifulSoup(html, 'html.parser')
-                    if bool(re.search(r'p_no=\d+$', driver.current_url)):
-                        player_id.loc[team, column] = driver.current_url.split('p_no=')[-1]
-                        ntfy("draft id of " + player_name.loc[team, column] + " is updated.")
-                        continue
-                    temp = bsObject.find_all("table")[0]
-                    if temp.find_all("tr")[1].text == '검색된 선수가 없습니다.':
-                        continue
-                else:
-                    id = get_player_id(driver, player_name.loc[team, column])
-                    player_id.loc[team, column] = id
-                    if id == "검색 필요":
-                        ntfy(player_name.loc[team, column] + " draft_id_error")
-                        error_state = 1
-
-    for trans in transaction.index:
-        if get_player_name(driver, transaction.loc[trans, "id"]) != transaction.loc[trans, "name"]:
-            if transaction.loc[trans, "id"] == '0':
-                name = transaction.loc[trans, "name"]
-                driver.get("https://statiz.sporki.com/player/?m=search&s=" + name)
-                html = driver.page_source
-                bsObject = BeautifulSoup(html, 'html.parser')
-                if bool(re.search(r'p_no=\d+$', driver.current_url)):
-                    transaction.loc[trans, "id"] = driver.current_url.split('p_no=')[-1]
-                    ntfy("transaction id of " + transaction.loc[trans, "name"] + " is updated.")
-                    continue
-                temp = bsObject.find_all("table")[0]
-                if temp.find_all("tr")[1].text == '검색된 선수가 없습니다.':
-                    continue
-            else:
-                id = get_player_id(driver, transaction.loc[trans, "name"])
-                transaction.loc[trans, "id"] = id
-                if id == "검색 필요":
-                    ntfy(transaction.loc[trans, "name"] + " transaction_id_error")
-                    error_state = 1
-
-    player_id = player_id.reset_index()
-    player_name = player_name.reset_index()
-
-    save_sheet(player_id, "player_id")
-    save_sheet(player_name, "player_name")
-    save_sheet(transaction, "transaction")
-
-    if error_state == 1:
-        quit()
+    return player_name, player_id, player_activation, war_basis, player_transaction
 
 # 타자 데이터 로드 함수
 def load_statiz_bat(driver):
-    driver.get("https://statiz.sporki.com/stats/?m=main&m2=batting&m3=default&so=WAR&ob=DESC&year=2024&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
+    driver.get("https://statiz.sporki.com/stats/?m=main&m2=batting&m3=default&so=WAR&ob=DESC&year=2025&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
     bat_chart = BeautifulSoup(driver.page_source, 'html.parser').find_all("table")[0]
 
-    driver.get("https://statiz.sporki.com/stats/?m=main&m2=batting&m3=value&so=WAR&ob=DESC&year=2024&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
+    driver.get("https://statiz.sporki.com/stats/?m=main&m2=batting&m3=value&so=WAR&ob=DESC&year=2025&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
     bat_value_chart = BeautifulSoup(driver.page_source, 'html.parser').find_all("table")[0]
 
     team_dic = {
-        "/data/team/ci/2024/2002.svg": "KIA",
-        "/data/team/ci/2024/12001.svg": "KT",
-        "/data/team/ci/2024/10001.svg": "키움",
-        "/data/team/ci/2024/11001.svg": "NC",
-        "/data/team/ci/2024/5002.svg": "LG",
-        "/data/team/ci/2024/1001.svg": "삼성",
-        "/data/team/ci/2024/6002.svg": "두산",
-        "/data/team/ci/2024/7002.svg": "한화",
-        "/data/team/ci/2024/9002.svg": "SSG",
-        "/data/team/ci/2024/3001.svg": "롯데"
+        "/data/team/ci/2025/2002.svg": "KIA",
+        "/data/team/ci/2025/12001.svg": "KT",
+        "/data/team/ci/2025/10001.svg": "키움",
+        "/data/team/ci/2025/11001.svg": "NC",
+        "/data/team/ci/2025/5002.svg": "LG",
+        "/data/team/ci/2025/1001.svg": "삼성",
+        "/data/team/ci/2025/6002.svg": "두산",
+        "/data/team/ci/2025/7002.svg": "한화",
+        "/data/team/ci/2025/9002.svg": "SSG",
+        "/data/team/ci/2025/3001.svg": "롯데"
     }
 
     column = ["Rank", "Name", "ID", "Team", "POS", "WAR", "oWAR", "dWAR", "G", "PA", "ePA", "AB", "R", "H", "2B", "3B", "HR", "TB", "RBI", "SB", "CS", "BB", "HP", "IB", "SO", "GDP", "SH", "SF", "AVG", "OBP", "SLG", "OPS", "R/ePA", "wRC+", "WAR"]
@@ -295,54 +241,13 @@ def load_statiz_bat(driver):
         row_df = pd.DataFrame([row], columns=column)
         bat = pd.concat([bat, row_df], ignore_index=True)
 
-    column = ["Rank", "Name", "ID", "Team", "POS", "WAR", "PA", "타격 RAA", "도루 RAA", "주루 RAA", "공격 RAA", "필딩 RAA", "포지션 RAA", "수비 RAA", "종합 RAA", "대체 Run", "RAR", "RPW", "WAAOff", "WAA", "oWAR", "dWAR", "WAR", "연봉(만원)", "WAR당 연봉"]
-
-    bat_value = pd.DataFrame(columns=column)
-    templen = len(bat_value_chart.find_all("tr"))
-
-    for i in range(2, templen):
-        tempTr = bat_value_chart.find_all("tr")[i]
-        if tempTr.find("th") is not None:
-            continue
-        row = {}
-        column_idx = 0
-        for j in range(23):
-            tempTd = tempTr.find_all("td")[j].text
-            if j == 1:  # Name 열
-                ID = tempTr.find_all("td")[j].find('a')['href'].split('p_no=')[-1]
-                row[column[column_idx]] = tempTd
-                column_idx += 1
-                row[column[column_idx]] = ID
-                column_idx += 1
-            elif j == 2:
-                team = tempTr.find_all("td")[j].find('img')['src']
-                row[column[column_idx]] = team_dic[team]
-                column_idx += 1
-                pos = tempTr.find_all("td")[j].find_all('span')[-1].text
-                row[column[column_idx]] = pos
-                column_idx += 1
-            else:
-                row[column[column_idx]] = tempTd
-                column_idx += 1
-        row_df = pd.DataFrame([row], columns=column)
-        bat_value = pd.concat([bat_value, row_df], ignore_index=True)
-
-    bat = pd.merge(bat, bat_value[["ID", "포지션 RAA", "RPW"]], how='outer', on='ID')
-
-    bat.insert(bat.columns.get_indexer_for(['WAR'])[0], 'WAR*', 0.0)
-    bat['포지션 RAA'] = bat['포지션 RAA'].replace('', 0).astype(float)
-    bat['RPW'] = bat['RPW'].replace('', 0).astype(float)
-    bat['oWAR'] = bat['oWAR'].replace('', 0).astype(float)
-    bat['포지션 RAA'] = bat['포지션 RAA'].fillna(0)
-    bat['RPW'] = bat['RPW'].fillna(bat['RPW'].mean())
-
-    bat['WAR*'] = bat.apply(lambda row: round(row['oWAR'] + row['포지션 RAA'] / row['RPW'], 2), axis=1)
-
     bat = bat.loc[:, ~bat.columns.duplicated()]
+    
+    bat['oWAR'] = bat['oWAR'].replace('', 0).astype(float)
 
     bat = bat.set_index(keys='ID')
 
-    bat = bat.sort_values(by='WAR*', ascending=False)
+    bat = bat.sort_values(by='oWAR', ascending=False)
 
     bat['Rank'] = range(1, len(bat) + 1)
 
@@ -350,20 +255,20 @@ def load_statiz_bat(driver):
 
 # 투수 데이터 로드 함수
 def load_statiz_pit(driver):
-    driver.get("https://statiz.sporki.com/stats/?m=main&m2=pitching&m3=default&so=WAR&ob=DESC&year=2024&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
+    driver.get("https://statiz.sporki.com/stats/?m=main&m2=pitching&m3=default&so=WAR&ob=DESC&year=2025&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
     pit_chart = BeautifulSoup(driver.page_source, 'html.parser').find_all("table")[0]
 
     team_dic = {
-        "/data/team/ci/2024/2002.svg": "KIA",
-        "/data/team/ci/2024/12001.svg": "KT",
-        "/data/team/ci/2024/10001.svg": "키움",
-        "/data/team/ci/2024/11001.svg": "NC",
-        "/data/team/ci/2024/5002.svg": "LG",
-        "/data/team/ci/2024/1001.svg": "삼성",
-        "/data/team/ci/2024/6002.svg": "두산",
-        "/data/team/ci/2024/7002.svg": "한화",
-        "/data/team/ci/2024/9002.svg": "SSG",
-        "/data/team/ci/2024/3001.svg": "롯데"
+        "/data/team/ci/2025/2002.svg": "KIA",
+        "/data/team/ci/2025/12001.svg": "KT",
+        "/data/team/ci/2025/10001.svg": "키움",
+        "/data/team/ci/2025/11001.svg": "NC",
+        "/data/team/ci/2025/5002.svg": "LG",
+        "/data/team/ci/2025/1001.svg": "삼성",
+        "/data/team/ci/2025/6002.svg": "두산",
+        "/data/team/ci/2025/7002.svg": "한화",
+        "/data/team/ci/2025/9002.svg": "SSG",
+        "/data/team/ci/2025/3001.svg": "롯데"
     }
 
     column = ["Rank", "Name", "ID", "Team", "POS", "WAR", "G", "GS", "GR", "GF", "CG", "SHO", "W", "L", "S", "HD", "IP", "ER", "R", "rRA", "TBF", "H", "2B", "3B", "HR", "BB", "HP", "IB", "SO", "ROE", "BK", "WP", "ERA", "RA9", "rRA9", "rRA9pf", "FIP", "WHIP", "WAR"]
@@ -435,44 +340,6 @@ def right_bottom(doc, sheet):
 
     return f"{col_to_letter(last_column)}{last_row}"
 
-# 자유계약 선수 업데이트 함수
-def update_fa(bat, pit, player_id, player_activation, doc):
-    bat_fa = bat[bat.index.to_series().apply(lambda x: isactive(x, player_id, player_activation)) == False]
-    pit_fa = pit[pit.index.to_series().apply(lambda x: isactive(x, player_id, player_activation)) == False]
-
-    total_fa = pd.concat([bat_fa.assign(**{'WAR/WAR*': bat_fa['WAR*']})[["Name", "Team", "POS", "WAR/WAR*"]],
-                          pit_fa.assign(**{'WAR/WAR*': pit_fa['WAR']})[["Name", "Team", "POS", "WAR/WAR*"]]])
-
-    bat_fa = bat_fa[["Rank", "Name", "Team", "POS", "WAR*", "AVG", "OBP", "SLG", "OPS", "wRC+", "G", "H", "HR", "RBI", "SB"]]
-    pit_fa = pit_fa[["Rank", "Name", "Team", "WAR", "G", "GS", "IP", "ERA", "FIP", "WHIP"]]
-
-    bat_fa = bat_fa.sort_values(by='WAR*', ascending=False)
-    pit_fa = pit_fa.sort_values(by='WAR', ascending=False)
-    total_fa = total_fa.sort_values(by='WAR/WAR*', ascending=False)
-
-    bat_fa['Rank'] = range(1, len(bat_fa) + 1)
-    pit_fa['Rank'] = range(1, len(pit_fa) + 1)
-
-    total_fa.insert(0, 'Rank', 0)
-    total_fa['Rank'] = range(1, len(total_fa) + 1)
-
-    kst = pytz.timezone('Asia/Seoul')
-    now = str(datetime.now(kst).strftime('%Y-%m-%d %H:%M:%S'))
-    update = pd.DataFrame([["last update", now], ["타자", str(len(bat_fa)) + " 명"], ["투수", str(len(pit_fa)) + " 명"], ["전체", str(len(total_fa)) + " 명"]])
-
-    doc.worksheet("bat").update([bat_fa.columns.values.tolist()] + bat_fa.values.tolist())
-    doc.worksheet("pit").update([pit_fa.columns.values.tolist()] + pit_fa.values.tolist())
-    doc.worksheet("total").update([total_fa.columns.values.tolist()] + total_fa.values.tolist())
-    doc.worksheet("update").update(update.values.tolist())
-
-    doc.worksheet("bat").clear_basic_filter()
-    doc.worksheet("pit").clear_basic_filter()
-    doc.worksheet("total").clear_basic_filter()
-
-    doc.worksheet("bat").set_basic_filter("B1:" + right_bottom(doc, "bat"))
-    doc.worksheet("pit").set_basic_filter("B1:" + right_bottom(doc, "pit"))
-    doc.worksheet("total").set_basic_filter("B1:" + right_bottom(doc, "total"))
-
 # WAR 계산 함수
 def get_war(bat, pit, player_id, player_activation, war_basis):
     live_war = player_id.copy()
@@ -485,7 +352,8 @@ def get_war(bat, pit, player_id, player_activation, war_basis):
             elif ID == 0:
                 live_war.loc[team, column] = 0
             else:
-                bat_war = float(bat.loc[ID, "WAR*"]) if ID in bat.index else 0
+                #bat_war = float(bat.loc[ID, "WAR*"]) if ID in bat.index else 0
+                bat_war = float(bat.loc[ID, "oWAR"]) if ID in bat.index else 0
                 pit_war = float(pit.loc[ID, "WAR"]) if ID in pit.index else 0
                 live_war.loc[team, column] = bat_war + pit_war
 
@@ -504,13 +372,12 @@ def get_war(bat, pit, player_id, player_activation, war_basis):
     return live_war, current_war
 
 # DB 업데이트 함수
-def update_db(player_name, player_id, current_war, bat, pit):
+def update_db(player_name, player_id, player_activation, live_war, current_war, bat, pit, games):
     for team in player_id.index:
         data = pd.DataFrame({"ID": player_id.loc[team], "Name": player_name.loc[team]})
         data = data[np.isnan(pd.to_numeric(data["ID"])) == False]
 
-        db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team)
-        db = db.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
+        db = load_table(team)
         db = db.set_index("index")
         db.index.name = None
         db = db.drop(["ID", "Name"], axis=1)
@@ -528,19 +395,16 @@ def update_db(player_name, player_id, current_war, bat, pit):
         today = today[np.isnan(pd.to_numeric(today[team])) == False]
         today = today.rename(columns={team: date})
 
-        today = today.map(lambda x: f'{x:.2f}')
-
         data = data.join(today)
 
-        data = data.replace(np.nan, "")
+        data.iloc[:, 2:] = data.iloc[:, 2:].replace('', np.nan).astype(float)
 
         save_sheet(data.reset_index(), team)
 
         data_diff = pd.DataFrame({"ID": player_id.loc[team], "Name": player_name.loc[team]})
         data_diff = data_diff[np.isnan(pd.to_numeric(data_diff["ID"])) == False]
 
-        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
-        db_diff = db_diff.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
+        db_diff = load_table(team + "_변화")
         db_diff = db_diff.set_index("index")
         db_diff.index.name = None
         db_diff = db_diff.drop(["ID", "Name"], axis=1)
@@ -550,17 +414,15 @@ def update_db(player_name, player_id, current_war, bat, pit):
 
         data_diff = data_diff.join(db_diff)
 
-        data["gap"] = data.apply(lambda x: f'{float(x.iloc[-1]) - (0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
+        data["gap"] = data.apply(lambda x: x.iloc[-1] - (0 if x.iloc[-2] == np.nan else x.iloc[-2]), axis=1)
         gap = data.iloc[:, [-1]]
         gap = gap.rename(columns={"gap": date})
 
         data_diff = data_diff.join(gap)
-        data_diff = data_diff.replace(np.nan, "")
 
-        save_sheet(data_diff.reset_index(), team + " 변화")
+        save_sheet(data_diff.reset_index(), team + "_변화")
 
-    db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
-    db = db.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
+    db = load_table("teams")
     db = db.set_index("팀")
 
     date = get_date()
@@ -575,38 +437,136 @@ def update_db(player_name, player_id, current_war, bat, pit):
     IF_fa = bat_fa[bat_fa["POS"].isin(["1B", "2B", "3B", "SS"])]
     C_fa = bat_fa[bat_fa["POS"].isin(["C"])]
 
-    else_fa = pd.concat([OF_fa.iloc[6:].assign(**{'WAR/WAR*': OF_fa['WAR*']})[["Name", "Team", "POS", "WAR/WAR*"]],
-                         IF_fa.iloc[8:].assign(**{'WAR/WAR*': IF_fa['WAR*']})[["Name", "Team", "POS", "WAR/WAR*"]],
-                         C_fa.iloc[3:].assign(**{'WAR/WAR*': C_fa['WAR*']})[["Name", "Team", "POS", "WAR/WAR*"]],
-                         pit_fa.iloc[12:].assign(**{'WAR/WAR*': pit_fa['WAR']})[["Name", "Team", "POS", "WAR/WAR*"]]])
-    else_fa = else_fa.sort_values(by='WAR/WAR*', ascending=False)
+    else_fa = pd.concat([OF_fa.iloc[6:].assign(**{'WAR/oWAR': OF_fa['oWAR']})[["Name", "Team", "POS", "WAR/oWAR"]],
+                            IF_fa.iloc[8:].assign(**{'WAR/oWAR': IF_fa['oWAR']})[["Name", "Team", "POS", "WAR/oWAR"]],
+                            C_fa.iloc[3:].assign(**{'WAR/oWAR': C_fa['oWAR']})[["Name", "Team", "POS", "WAR/oWAR"]],
+                            pit_fa.iloc[12:].assign(**{'WAR/oWAR': pit_fa['WAR']})[["Name", "Team", "POS", "WAR/oWAR"]]])
+    else_fa = else_fa.sort_values(by='WAR/oWAR', ascending=False)
 
-    war_fa = OF_fa.iloc[0:5]["WAR*"].sum() + IF_fa.iloc[0:7]["WAR*"].sum() + C_fa.iloc[0:2]["WAR*"].sum() + pit_fa.iloc[0:11]["WAR"].sum() + else_fa.iloc[0:8]["WAR/WAR*"].sum()
+    war_fa = OF_fa.iloc[0:5]["oWAR"].sum() + IF_fa.iloc[0:7]["oWAR"].sum() + C_fa.iloc[0:2]["oWAR"].sum() + pit_fa.iloc[0:11]["WAR"].sum() + else_fa.iloc[0:3]["WAR/oWAR"].sum()
 
     today = pd.DataFrame(current_war.sum(axis=1), columns=[date])
-    today = today.map(lambda x: f'{x:.2f}')
-
-    today.loc["퐈"] = [f'{war_fa:.2f}']
+    today.loc["퐈"] = [war_fa]
 
     db = db.join(today)
 
     save_sheet(db.reset_index(), "teams")
     
-    db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff")
-    db_diff = db_diff.map(lambda x: f'{x:.2f}' if isinstance(x, (int, float, np.number)) and not pd.isnull(x) else x)
+    db_diff = load_table("teams_diff")
     db_diff = db_diff.set_index("팀")
 
     if date in db_diff.columns:
         db_diff = db_diff.drop(date, axis=1)
 
-    db["gap"] = db.apply(lambda x: f'{float(x.iloc[-1]) - (0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
+    db["gap"] = db.apply(lambda x: x.iloc[-1] - (0.0 if x.iloc[-2] == "" else x.iloc[-2]), axis=1)
     gap = db.iloc[:, [-1]]
     gap = gap.rename(columns={"gap": date})
 
     db_diff = db_diff.join(gap)
-    db_diff = db_diff.replace(np.nan, "")
 
-    save_sheet(db_diff.reset_index(), "teams diff")
+    save_sheet(db_diff.reset_index(), "teams_diff")
+    
+    save_sheet(live_war.iloc[:, 0:28].reset_index(), "draft_live_war")
+    
+    data = bat[["Name", "oWAR"]].rename(columns={"oWAR": date})
+    bat_mapping = bat.reset_index()[['ID', 'Name']].drop_duplicates().set_index('ID')
+    data = data.drop("Name", axis=1)
+        
+    db = load_table("bat")
+    db = db.set_index("ID")
+
+    if date in db.columns:
+        db = db.drop(date, axis=1)
+
+    db = db.join(data, how="outer")
+    mask = db['Name'].isna()
+    db.loc[mask, 'Name'] = db.loc[mask].index.map(bat_mapping['Name'].get)
+    
+    save_sheet(db.reset_index(), "bat")
+    
+    data = pit[["Name", "WAR"]].rename(columns={"WAR": date})
+    pit_mapping = pit.reset_index()[['ID', 'Name']].drop_duplicates().set_index('ID')
+    data = data.drop("Name", axis=1)
+        
+    db = load_table("pit")
+    db = db.set_index("ID")
+
+    if date in db.columns:
+        db = db.drop(date, axis=1)
+
+    db = db.join(data, how="outer")
+    mask = db['Name'].isna()
+    db.loc[mask, 'Name'] = db.loc[mask].index.map(pit_mapping['Name'].get)
+    
+    save_sheet(db.reset_index(), "pit")
+    
+    db = load_table("roster").set_index("팀")
+
+    if date in db.columns:
+        db = db.drop(date, axis=1)
+        
+    active_players = pd.Series(index=player_activation.index, dtype=object)
+
+    for team in player_activation.index:
+        active_ids = []
+        for round_name in player_activation.columns:
+            if player_activation.loc[team, round_name]:
+                player_id_value = player_id.loc[team, round_name]
+                if pd.notnull(player_id_value):
+                    active_ids.append(str(int(player_id_value)))
+        active_players[team] = ','.join(active_ids)
+
+    db[date] = active_players
+
+    save_sheet(db.reset_index(), "roster")
+        
+    dfs = []
+
+    for team in player_id.index:
+        db_diff = load_table(team + "_변화")
+        db_diff = db_diff.iloc[:, 2:]
+        db_diff.insert(0, '소속팀', team)
+        dates = db_diff.columns[2:]
+        dfs_team = []
+
+        for date in dates:
+            df_temp = db_diff[["소속팀", "Name", date]].copy()
+            df_temp.columns = ['소속팀', '이름', 'WAR 변동']
+            df_temp.insert(1, "날짜", date)
+            dfs_team.append(df_temp)
+
+        dfs.extend(dfs_team)
+
+    diff = pd.concat(dfs, ignore_index=True)
+
+    diff['WAR 변동'] = diff.apply(lambda x: float(x["WAR 변동"]), axis=1)
+    GOAT = diff.copy()
+    GOAT = GOAT[GOAT['WAR 변동'] > 0]
+    GOAT = GOAT.sort_values(by='WAR 변동', ascending=False)
+    GOAT['WAR 변동'] = GOAT.apply(lambda x: f'{x["WAR 변동"]:.2f}', axis=1)
+    save_sheet(GOAT, "GOAT")
+    
+    BOAT = diff.copy()
+    BOAT = BOAT[BOAT['WAR 변동'] < 0]
+    BOAT = BOAT.sort_values(by='WAR 변동', ascending=True)
+    BOAT['WAR 변동'] = BOAT.apply(lambda x: f'{x["WAR 변동"]:.2f}', axis=1)
+    save_sheet(BOAT, "BOAT")
+    
+    kst = pytz.timezone('Asia/Seoul')
+    now = str(datetime.now(kst).strftime('%Y-%m-%d %H:%M:%S'))
+    update = pd.DataFrame([["업데이트 시간", now]])
+
+    if check_update(bat, pit, games):
+        war_update = pd.DataFrame([["WAR 업데이트", "업데이트 완료"]])
+    elif games.iloc[-1, 0] == '오늘은 경기가 없습니다.':
+        war_update = pd.DataFrame()
+    else:
+        war_update = pd.DataFrame([["WAR 업데이트", "업데이트 전"]])
+
+    update = pd.concat([update, games, war_update], axis=0)
+    update = update.fillna("")
+    
+    save_sheet(update, "update_info")
 
 # 경기 결과 업데이트 함수
 def update_games(driver, return_type="df"):
@@ -614,20 +574,20 @@ def update_games(driver, return_type="df"):
     today_month = int(today.split('/')[0])
     today_day = int(today.split('/')[1])
 
-    driver.get("https://statiz.sporki.com/stats/?m=main&m2=pitching&m3=situation1&so=ERA&ob=ASC&year=2024&sy=&ey=&te=&po=&lt=10100&reg=A&pe=I&ds=" + str(today_month).zfill(2) + "-" + str(today_day).zfill(2) + "&de=" + str(today_month).zfill(2) + "-" + str(today_day).zfill(2) + "&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
+    driver.get("https://statiz.sporki.com/stats/?m=main&m2=pitching&m3=situation1&so=ERA&ob=ASC&year=2025&sy=&ey=&te=&po=&lt=10100&reg=A&pe=I&ds=" + str(today_month).zfill(2) + "-" + str(today_day).zfill(2) + "&de=" + str(today_month).zfill(2) + "-" + str(today_day).zfill(2) + "&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba=&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls=&sf1=&sk1=&sv1=&sf2=&sk2=&sv2=")
     pit_chart = BeautifulSoup(driver.page_source, 'html.parser').find_all("table")[0]
 
     team_dic = {
-        "/data/team/ci/2024/2002.svg": "KIA",
-        "/data/team/ci/2024/12001.svg": "KT",
-        "/data/team/ci/2024/10001.svg": "키움",
-        "/data/team/ci/2024/11001.svg": "NC",
-        "/data/team/ci/2024/5002.svg": "LG",
-        "/data/team/ci/2024/1001.svg": "삼성",
-        "/data/team/ci/2024/6002.svg": "두산",
-        "/data/team/ci/2024/7002.svg": "한화",
-        "/data/team/ci/2024/9002.svg": "SSG",
-        "/data/team/ci/2024/3001.svg": "롯데"
+        "/data/team/ci/2025/2002.svg": "KIA",
+        "/data/team/ci/2025/12001.svg": "KT",
+        "/data/team/ci/2025/10001.svg": "키움",
+        "/data/team/ci/2025/11001.svg": "NC",
+        "/data/team/ci/2025/5002.svg": "LG",
+        "/data/team/ci/2025/1001.svg": "삼성",
+        "/data/team/ci/2025/6002.svg": "두산",
+        "/data/team/ci/2025/7002.svg": "한화",
+        "/data/team/ci/2025/9002.svg": "SSG",
+        "/data/team/ci/2025/3001.svg": "롯데"
     }
 
     updated_teams = set()
@@ -639,7 +599,7 @@ def update_games(driver, return_type="df"):
         if tempTr.find("th") is not None:  continue
         updated_teams.add(team_dic[tempTr.find_all("td")[2].find('img')['src']])
 
-    driver.get("https://statiz.sporki.com/schedule/?year=2024&month=" + str(today_month))
+    driver.get("https://statiz.sporki.com/schedule/?year=2025&month=" + str(today_month))
     calender = BeautifulSoup(driver.page_source, 'html.parser').find_all("table")[0]
     templen = len(calender.find_all("tr"))
 
@@ -693,215 +653,34 @@ def update_games(driver, return_type="df"):
         return pd.DataFrame(games)
     else:
         return pd.DataFrame(games), started_number
-    
-# 서비스 데이터 업데이트 함수
-def update_service(doc_service, player_name, player_id, live_war, games):
-    db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams")
-    db = db.iloc[:, [0, -2, -1]]
-    date = db.columns[-1]
-    db["변동"] = db.apply(lambda x: f'{float(x.iloc[-1]) - float(0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
-    db = db.iloc[:, [0, 2, 3]]
-    db.columns = ["팀", "WAR", "변동"]
-    db = db.iloc[::-1]
-    temp_fa = db[db["팀"] == "퐈"]
-    db = db[db["팀"] != "퐈"]
-    db = db.sort_values(by='WAR', ascending=False)
-    db.insert(0, '순위', 0)
-    db['순위'] = range(1, len(db) + 1)
-    temp_fa.insert(0, '순위', 0)
-    temp_fa['순위'] = [""]
-    db = pd.concat([db, temp_fa], ignore_index=True)
-    db = db.sort_values(by='WAR', ascending=False)
-    db['WAR'] = db.apply(lambda x: f'{x["WAR"]:.2f}', axis=1)
-
-    doc_service.worksheet("팀 순위").update([db.columns.values.tolist()] + db.values.tolist())
-    
-    db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name="teams diff").set_index("팀").iloc[:-1]
-    
-    mean = np.nanmean(db_diff.values)
-    std = np.nanstd(db_diff.values)
-
-    z_diff = db.set_index("팀")[["변동"]].map(lambda x: (float(x) - mean) / std)
-    norm = Normalize(vmin=-3, vmax=3)
-    sm = ScalarMappable(cmap='coolwarm', norm=norm)
-
-    colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
-    colored_diff = colored_diff.map(lambda x: [color / 255 for color in x])
-
-    sheet = doc_service.worksheet("팀 순위")
-    batch = batch_updater(sheet.spreadsheet)
-        
-    for i in range(db.shape[0]):
-        cell = f"D{i+2}"
-        fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
-        if db.iloc[i]["팀"] == "퐈":
-            fmt = cellFormat(backgroundColor=color(1, 1, 1))
-        batch.format_cell_range(sheet, cell, fmt)
-        
-    batch.execute()
-
-    dfs = []
-
-    for team in player_id.index:
-        db = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team)
-        db = db.iloc[:, [0, 2, -2, -1]]
-        db = db.fillna("")
-        db["변동"] = db.apply(lambda x: f'{float(x.iloc[-1]) - (0 if x.iloc[-2] == "" else float(x.iloc[-2])):.2f}', axis=1)
-        db = db.iloc[:, [0, 1, 3, 4]]
-        db.columns = ["드래프트", "이름", "WAR", "변동"]
-        db["WAR"] = db.apply(lambda x: float(x["WAR"]), axis=1)
-        db = db.sort_values(by='WAR', ascending=False)
-        db["WAR"] = db.apply(lambda x: f'{x["WAR"]:.2f}', axis=1)
-        db.insert(0, '순위', 0)
-        db['순위'] = range(1, len(db) + 1)
-
-        doc_service.worksheet("팀 " + team).update([db.columns.values.tolist()] + db.values.tolist())
-        
-        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화").iloc[:, 3:]
-
-        mean = np.nanmean(db_diff.values)
-        std = np.nanstd(db_diff.values)
-
-        z_diff = db.set_index("드래프트")[["변동"]].map(lambda x: (float(x) - mean) / std)
-        norm = Normalize(vmin=-3, vmax=3)
-        sm = ScalarMappable(cmap='coolwarm', norm=norm)
-
-        colored_diff = z_diff.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
-        colored_diff = colored_diff.map(lambda x: [color / 255 for color in x])
-
-        sheet = doc_service.worksheet("팀 " + team)
-        batch = batch_updater(sheet.spreadsheet)
-            
-        for i in range(db.shape[0]):
-            cell = f"E{i+2}"
-            fmt = cellFormat(backgroundColor=color(colored_diff.iloc[i, 0][0], colored_diff.iloc[i, 0][1], colored_diff.iloc[i, 0][2]))
-            batch.format_cell_range(sheet, cell, fmt)
-            
-        batch.execute()
-
-        db_diff = pd.read_excel("/home/ubuntu/untatiz/db/untatiz_db.xlsx", sheet_name=team + " 변화")
-        n = min(7, len(db_diff.columns) - 3)
-        db_diff = db_diff.iloc[:, [2] + list(range(-n, 0))]
-        db_diff.insert(0, '팀', "팀 " + team)
-        dates = db_diff.columns[2:]
-        dfs_team = []
-
-        for date in dates:
-            df_temp = db_diff[["팀", "Name", date]].copy()
-            df_temp.columns = ['팀', '이름', 'WAR 변동']
-            df_temp.insert(1, "날짜", date)
-            dfs_team.append(df_temp)
-
-        dfs.extend(dfs_team)
-
-    diff = pd.concat(dfs, ignore_index=True)
-
-    diff['WAR 변동'] = diff.apply(lambda x: float(x["WAR 변동"]), axis=1)
-    GOAT = diff.copy()
-    GOAT = GOAT[GOAT['WAR 변동'] > 0]
-    GOAT = GOAT.sort_values(by='WAR 변동', ascending=False)
-    GOAT['WAR 변동'] = GOAT.apply(lambda x: f'{x["WAR 변동"]:.2f}', axis=1)
-    GOAT.insert(0, '순위', 0)
-    GOAT['순위'] = range(1, len(GOAT) + 1)
-    BOAT = diff.copy()
-    BOAT = BOAT[BOAT['WAR 변동'] < 0]
-    BOAT = BOAT.sort_values(by='WAR 변동', ascending=True)
-    BOAT['WAR 변동'] = BOAT.apply(lambda x: f'{x["WAR 변동"]:.2f}', axis=1)
-    BOAT.insert(0, '순위', 0)
-    BOAT['순위'] = range(1, len(BOAT) + 1)
-
-    doc_service.worksheet("GOAT").clear()
-    doc_service.worksheet("BOAT").clear()
-
-    doc_service.worksheet("GOAT").update([GOAT.columns.values.tolist()] + GOAT.values.tolist())
-    doc_service.worksheet("BOAT").update([BOAT.columns.values.tolist()] + BOAT.values.tolist())
-    
-    draft = pd.DataFrame()
-
-    for i in range(max(len(player_name), len(live_war))):
-        if i < len(player_name):
-            draft = pd.concat([draft, player_name.iloc[[i],0:28]], ignore_index=True)
-        if i < len(live_war):
-            draft = pd.concat([draft, live_war.iloc[[i],0:28]], ignore_index=True)
-
-    draft.index = ["팀 언", "", "팀 앙", "", "팀 삼", "", "팀 준", "", "팀 역", "", "팀 뚝", "", "팀 홍", "", "팀 엉", "", "팀 코", "", "팀 옥", ""]
-
-    draft = draft.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
-
-    doc_service.worksheet("드래프트").update([[""] + list(draft.columns)] + [[draft.index[i]] + list(draft.iloc[i]) for i in range(len(draft))])
-
-    df = live_war.iloc[:,0:28]
-
-    z_df = df.copy()
-
-    for column in df.columns:
-        col_mean = df[column].mean()
-        col_std = df[column].std()
-        z_df[column] = (df[column] - col_mean) / col_std
-
-    norm = Normalize(vmin=-3, vmax=3)
-    sm = ScalarMappable(cmap='coolwarm', norm=norm)
-
-    colored_df = z_df.map(lambda x: sm.to_rgba(x, bytes=True)[:3])
-    colored_df = colored_df.map(lambda x: [color / 255 for color in x])
-
-    sheet = doc_service.worksheet("드래프트")
-    batch = batch_updater(sheet.spreadsheet)
-
-    for row in range(1, 11):
-        for col in range(1, 29):
-            col_letter = ""
-            n = col + 1
-            while n > 0:
-                n, remainder = divmod(n - 1, 26)
-                col_letter = chr(65 + remainder) + col_letter
-            cell = f"{col_letter}{2*row+1}"
-            fmt = cellFormat(backgroundColor=color(colored_df.iloc[row-1,col-1][0], colored_df.iloc[row-1,col-1][1], colored_df.iloc[row-1,col-1][2]))
-            batch.format_cell_range(sheet, cell, fmt)
-
-    batch.execute()
-
-    kst = pytz.timezone('Asia/Seoul')
-    now = str(datetime.now(kst).strftime('%Y-%m-%d %H:%M:%S'))
-    update = pd.DataFrame([["업데이트 시간", now]])
-
-    today = get_date()
-    if len(GOAT[GOAT["날짜"] == today]) > 0 or len(BOAT[BOAT["날짜"] == today]) > 0:
-        war_update = pd.DataFrame([["WAR 업데이트", "업데이트 완료"]])
-    elif games.iloc[-1, 0] == '오늘은 경기가 없습니다.':
-        war_update = pd.DataFrame()
-    else:
-        war_update = pd.DataFrame([["WAR 업데이트", "업데이트 전"]])
-
-    update = pd.concat([update, games, war_update], axis=0)
-    update = update.fillna("")
-
-    doc_service.worksheet("업데이트").clear()
-    doc_service.worksheet("업데이트").update(update.values.tolist())
 
 # DB 백업 함수
 def backup_db():
     kst = pytz.timezone('Asia/Seoul')
     now = str(datetime.now(kst).strftime('%Y%m%d%H%M%S'))
     backup_dir = '/home/ubuntu/untatiz/backup/'
-    shutil.copy2("/home/ubuntu/untatiz/db/untatiz_db.xlsx", f'{backup_dir}{now}.xlsx')
+    shutil.copy2("/home/ubuntu/untatiz/db/untatiz_db.db", f'{backup_dir}{now}.db')
 
 # 시트 저장 함수
-def save_sheet(df, sheet_name):
-    book = load_workbook("/home/ubuntu/untatiz/db/untatiz_db.xlsx")
-    with pd.ExcelWriter("/home/ubuntu/untatiz/db/untatiz_db.xlsx", engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
-        writer.workbook = book
-        df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-# 트랜잭션 업데이트 함수
-def update_transaction(doc_transaction):
-    transaction = doc_transaction.worksheet("transaction").get_all_values()
-    transaction = pd.DataFrame(transaction[1:], columns=transaction[0])
-    transaction["WAR"] = transaction["WAR"].astype(float)
-    transaction["WAR"] = transaction["WAR"].apply(lambda x: f"{x:.2f}")
-    transaction = transaction.astype(str)
-    doc_transaction.worksheet("transaction").update([transaction.columns.values.tolist()] + transaction.values.tolist())
-    save_sheet(transaction, "transaction")
+def save_sheet(df, table_name):
+    """DataFrame을 SQLite 테이블로 저장
+    
+    Args:
+        df: 저장할 pandas DataFrame
+        table_name: 저장할 테이블 이름
+    """
+    try:
+        with sqlite3.connect("/home/ubuntu/untatiz/db/untatiz_db.db") as conn:
+            # DataFrame을 SQLite 테이블로 저장
+            df.to_sql(
+                name=table_name,
+                con=conn,
+                if_exists='replace',  # 기존 테이블이 있으면 덮어쓰기
+                index=False
+            )
+    except Exception as e:
+        print(f"Error saving table {table_name}: {str(e)}")
+        raise
 
 # 시간 상태 반환 함수
 def get_time_status():
@@ -910,20 +689,16 @@ def get_time_status():
     minute = now.minute
     second = now.second
 
-    if 0 <= minute < 15:
-        return 0
-    elif 15 <= minute < 30:
-        return 1
-    elif 30 <= minute < 45:
+    if 0 <= minute < 30:
         return 0
     else:
         return 1
 
 # WAR 상태 반환 함수
-def get_war_status(doc_service):
-    war_update = doc_service.worksheet("업데이트").get_all_values()
-    if war_update[-1][1] == "업데이트 완료": return 1
-    elif war_update[-1][1] == "업데이트 전": return 0
+def get_war_status():
+    war_update = load_table("update_info").iloc[-1, 1]
+    if war_update == "업데이트 완료": return 1
+    elif war_update == "업데이트 전": return 0
 
 # 팀 상태 반환 함수
 def get_team_status(driver):
@@ -967,15 +742,43 @@ def updated_teams(driver):
 
     return updated_teams
 
+def check_update(bat, pit, games):
+    
+    today = get_date()
+    yesterday = (datetime.strptime(today, "%m/%d") - timedelta(days=1)).strftime("%m/%d")
+
+    bat_update = bat[["Team"]].join(load_table("bat").set_index("ID"), how="left")
+    pit_update = pit[["Team"]].join(load_table("pit").set_index("ID"), how="left")
+
+    for col in bat_update.columns:
+        if col != "Team" and col != "Name":
+            bat_update[col] = bat_update[col].apply(lambda x: f"{float(x):.2f}" if isinstance(x, float) else x)
+
+    for col in pit_update.columns:
+        if col != "Team" and col != "Name":
+            pit_update[col] = pit_update[col].apply(lambda x: f"{float(x):.2f}" if isinstance(x, float) else x)
+
+    bat_updated_teams = list(bat_update[bat_update[today] != bat_update[yesterday]]["Team"].unique())
+    pit_updated_teams = list(pit_update[pit_update[today] != pit_update[yesterday]]["Team"].unique())
+    
+    filtered_games = games[(games[2] != '') & (games[1] != '우천취소')]
+    teams_set = set(filtered_games[0].tolist() + filtered_games[2].tolist())
+    
+    # Check if all teams in teams_set are present in both bat_updated_teams and pit_updated_teams
+    all_teams_in_bat = all(team in bat_updated_teams for team in teams_set)
+    all_teams_in_pit = all(team in pit_updated_teams for team in teams_set)
+    
+    return all_teams_in_bat and all_teams_in_pit
+
 # 크롬 옵션 설정
 chrome_options = wd.ChromeOptions()
 chrome_options.binary_location = "/usr/bin/chromium-browser"
 chrome_options.add_argument('--headless')
+chrome_options.add_argument("--proxy-server=socks5://127.0.0.1:9050")
 
-# 구글 스프레드시트 로드
-doc_service = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1dBXiLWcMnTToACuOySMume3xzkruL4iL_zLOYwtSaQY/edit?usp=sharing")
-doc_fa = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1ff2L7MFQbAWBtscwoQr1Y8UdY34f5Lk1ajR5jZu2rh8/edit?usp=sharing")
-doc_transaction = load_gspread("/home/ubuntu/untatiz/api/untatiz-75f1c6db233b.json", "https://docs.google.com/spreadsheets/d/1mOni5ojcYOU7XCMHCZUuMzb4qZEcHH73zUqrw1J75GU/edit?usp=sharing")
+ua = UserAgent()
+user_agent = ua.random
+chrome_options.add_argument('user-agent=' + user_agent)
 
 # 시간 및 팀 상태 초기화
 time_previous = 0
@@ -986,21 +789,33 @@ team_current = set([0])
 
 update_status = 1
 
+ip_count = 10
+
 while(True):
     try:
         while(True):
+            
+            if ip_count == 0:
+                changeIP()
+                ip_count = 10
+            
+            user_agent = ua.random
+            chrome_options.add_argument('user-agent=' + user_agent)
+            
             driver = wd.Chrome(service=Service("/usr/bin/chromedriver"), options=chrome_options)
             
-            time_previous = time_current
-            time_current = get_time_status()
+            war_status = get_war_status()
+            started, updated, total = get_team_status(driver)
             
             team_previous = team_current
             team_current = updated_teams(driver)
             
-            war_status = get_war_status(doc_service)
-            started, updated, total = get_team_status(driver)
+            ip_count -= 1
             
             driver.quit()
+            
+            time_previous = time_current
+            time_current = get_time_status()
             
             if update_status == 0  and total > 0:
                 update_status = 1
@@ -1025,16 +840,13 @@ while(True):
         
         print("update started at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
         
-        update_transaction(doc_transaction)
         #update_id(driver)
         player_name, player_id, player_activation, war_basis, transaction = load_data()
         games = update_games(driver)
         bat = load_statiz_bat(driver)
         pit = load_statiz_pit(driver)
         live_war, current_war = get_war(bat, pit, player_id, player_activation, war_basis)
-        update_db(player_name, player_id, current_war, bat, pit)
-        update_service(doc_service, player_name, player_id, live_war, games)
-        update_fa(bat, pit, player_id, player_activation, doc_fa)
+        update_db(player_name, player_id, player_activation, live_war, current_war, bat, pit, games)
         backup_db()
         
         print("update finished at : " + datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -1045,4 +857,8 @@ while(True):
         
     except Exception as e:
         print(f"Error occurred: {str(e)}")
+        
+        changeIP()
+        ip_count = 10
+        
         time.sleep(10)

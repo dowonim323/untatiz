@@ -1,0 +1,67 @@
+# Git ignore patterns
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+log/
+
+# Database
+*.db
+*.sqlite3
+
+# API credentials (NEVER commit these)
+api/*.json
+
+# Docker
+.docker/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Graph outputs (regenerated)
+graph/
+
+# News data (regenerated)
+news/
+
+# Conda environment file (use requirements.txt instead)
+# untatiz.yaml
