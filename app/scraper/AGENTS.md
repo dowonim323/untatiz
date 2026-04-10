@@ -1,29 +1,27 @@
 # APP/SCRAPER KNOWLEDGE BASE
 
 ## OVERVIEW
-`app/scraper/` is the most specialized subsystem: Statiz login-aware scraping, Selenium/session management, update scheduling, parsing, and DB write orchestration.
+`app/scraper/` is the most specialized subsystem: MLBPARK requests-based scraping, update scheduling, parser normalization, and DB write orchestration.
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
 |------|----------|-------|
-| Driver/session rotation | `client.py` | `StatizClient`, account-proxy rotation, cookies, request counts |
-| Update cadence | `scheduler.py` | `hourly` / `every_10min` / `every_5min` state machine |
+| Driver/session handling | `client.py` | Compatibility wrapper around the MLBPARK requests session, cache, request counts |
+| Update cadence | `scheduler.py` | `hourly` / `every_30min` / `every_5min` state machine |
 | Main write path | `jobs.py` | Update, backup, normalized-table writes, compatibility hooks |
-| HTML/data extraction | `parsers.py` | Statiz-specific assumptions and mappings |
+| Data extraction | `parsers.py` | MLBPARK endpoint mappings and legacy DataFrame shaping |
 
 ## CONVENTIONS
-- Assume Statiz login is required until code proves otherwise.
 - Preserve rate limiting, request counting, and account rotation semantics.
 - `scheduler.py` state is persisted JSON; maintain backward-compatible keys when changing state shape.
-- `client.py` is a wrapper around `statiz_utils.py`; many low-level behaviors still live there.
-- Treat year-specific mappings and scraping selectors as fragile contracts.
+- `client.py` keeps the legacy `StatizClient` surface for compatibility, but the live runtime now uses MLBPARK requests.
+- Treat team-code mappings, position mappings, and MLBPARK payload shapes as fragile contracts.
 
 ## ANTI-PATTERNS
-- Do not replace Selenium/login-aware flows with requests-only shortcuts.
 - Do not bypass `rotate()`, `ensure_ready()`, or request-count resets.
-- Do not assume one credentials schema, one proxy mode, or one Chromium path.
+- Do not assume MLBPARK payload fields or query parameters are permanently stable without checking live responses.
 - Do not mix unrelated cleanup/refactors into scraper bug fixes; this area is operationally brittle.
 
 ## NOTES
 - The outer execution loop lives in Docker/supervisor shell scripts; `untatiz.py` itself is a single-run batch entrypoint.
-- When debugging scraper failures, inspect `client.py`, `scheduler.py`, and `statiz_utils.py` together before changing behavior.
+- When debugging scraper failures, inspect `client.py`, `parsers.py`, and `scheduler.py` together before changing behavior.

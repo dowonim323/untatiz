@@ -4,7 +4,6 @@ from app.scraper.client import StatizClient
 from app.scraper.parsers import (
     load_statiz_bat,
     load_statiz_pit,
-    get_updated_teams,
     update_games,
     BAT_COLUMNS,
     PIT_COLUMNS,
@@ -29,7 +28,6 @@ __all__ = [
     # Parsers
     "load_statiz_bat",
     "load_statiz_pit",
-    "get_updated_teams",
     "update_games",
     "BAT_COLUMNS",
     "PIT_COLUMNS",
