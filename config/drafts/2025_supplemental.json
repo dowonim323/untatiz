@@ -1,0 +1,13 @@
+{
+  "season": 2025,
+  "draft_type": "supplemental",
+  "application_date": "2025-07-15",
+  "description": "2025시즌 올스타 브레이크 2차 드래프트",
+  "picks": [
+    {"team": "준", "round": "2차1R", "player_id": "XXXXX", "player_name": "선수이름"},
+    {"team": "준", "round": "2차2R", "player_id": "XXXXX", "player_name": "선수이름"},
+    
+    {"team": "뚝", "round": "2차1R", "player_id": "XXXXX", "player_name": "선수이름"},
+    {"team": "뚝", "round": "2차2R", "player_id": "XXXXX", "player_name": "선수이름"}
+  ]
+}

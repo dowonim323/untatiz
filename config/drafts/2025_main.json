@@ -1,0 +1,16 @@
+{
+  "season": 2025,
+  "draft_type": "main",
+  "application_date": "2025-03-21",
+  "description": "2025시즌 메인 드래프트",
+  "picks": [
+    {"team": "준", "round": "용병타", "player_id": "15004", "player_name": "김도영"},
+    {"team": "준", "round": "용병투1", "player_id": "16088", "player_name": "변우혁"},
+    {"team": "준", "round": "용병투2", "player_id": "16273", "player_name": "성하민"},
+    {"team": "준", "round": "1R", "player_id": "XXXXX", "player_name": "선수이름"},
+    
+    {"team": "뚝", "round": "용병타", "player_id": "XXXXX", "player_name": "선수이름"},
+    {"team": "뚝", "round": "용병투1", "player_id": "XXXXX", "player_name": "선수이름"},
+    {"team": "뚝", "round": "용병투2", "player_id": "XXXXX", "player_name": "선수이름"}
+  ]
+}
