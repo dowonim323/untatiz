@@ -82,6 +82,26 @@ def test_check_should_update_can_short_circuit_postgame_followup_without_driver(
     assert reason == "hourly: postgame follow-up full update"
 
 
+def test_check_should_update_runs_full_update_every_5min_once_games_end(temp_db):
+    state = {
+        "mode": UpdateMode.EVERY_5MIN.value,
+        "request_count": 0,
+    }
+
+    with patch("app.scraper.scheduler.should_check_now", return_value=True), patch(
+        "app.scraper.scheduler.get_team_status", return_value=(2, 2, 2)
+    ), patch("app.scraper.scheduler.get_date", return_value="2026-04-10"):
+        should_update, new_state, reason = check_should_update(
+            driver=object(),
+            state=state,
+            db_path=temp_db,
+        )
+
+    assert should_update is True
+    assert new_state["mode"] == UpdateMode.EVERY_5MIN.value
+    assert reason == "every_5min: ready for full update"
+
+
 def test_main_rotates_client_before_scheduler_skip_decision(temp_db, tmp_path):
     state_file = tmp_path / "scraper_state.json"
     config = SimpleNamespace(
