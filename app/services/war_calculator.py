@@ -106,9 +106,9 @@ def get_position_group(position: Optional[str]) -> str:
         return 'P'
     elif pos == 'C':
         return 'C'
-    elif pos in ('1B', '2B', 'SS', '3B'):
+    elif pos in ('1B', '2B', 'SS', '3B', 'IF'):
         return 'IF'
-    elif pos in ('LF', 'CF', 'RF'):
+    elif pos in ('LF', 'CF', 'RF', 'OF'):
         return 'OF'
     else:  # DH or unknown
         return 'NONE'

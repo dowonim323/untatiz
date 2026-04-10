@@ -1,473 +1,368 @@
-"""Statiz HTML parsers - extract data from statiz.co.kr pages."""
-
 from __future__ import annotations
 
-import time
-from typing import Any, Set, Tuple, TYPE_CHECKING
+import json
+from typing import Any, TYPE_CHECKING
 
 import pandas as pd
-from bs4 import BeautifulSoup
 
-from app.core.utils import get_business_year, get_date, get_team_from_svg
+from app.core.utils import TEAM_ID_MAP, get_business_date, get_business_year
 
 if TYPE_CHECKING:
-    from statiz_utils import RateLimiter
+    from app.scraper.client import RequestsRateLimiter
 
 
 class StatizBlockedError(Exception):
-    """Statiz에서 IP 차단 또는 접근 거부 시 발생하는 예외."""
     pass
 
 
 class StatizLoginRequiredError(Exception):
-    """Statiz 로그인이 필요할 때 발생하는 예외."""
     pass
 
 
-def _check_page_errors(page_source: str, url: str) -> None:
-    """페이지 소스에서 403/로그인 필요 에러를 감지하고 예외 발생.
-    
-    Args:
-        page_source: 페이지 HTML 소스
-        url: 요청한 URL
-        
-    Raises:
-        StatizBlockedError: 403 Forbidden 감지 시
-        StatizLoginRequiredError: 로그인 필요 메시지 감지 시
-    """
-    # 403 Forbidden 감지 (데이터센터 IP 차단)
-    if "403 Forbidden" in page_source:
-        raise StatizBlockedError(
-            f"403 Forbidden - Statiz에서 IP가 차단되었습니다. "
-            f"Residential 프록시를 사용하세요. URL: {url[:80]}"
+BAT_COLUMNS = ["ID", "Name", "Team", "POS", "G", "PA", "AVG", "oWAR", "WAR"]
+PIT_COLUMNS = ["ID", "Name", "Team", "G", "IP", "ERA", "WHIP", "WAR"]
+
+MLBPARK_API_ROOT = "https://mlbpark.donga.com/mp/api/stats"
+MLBPARK_STATS_ROOT = "https://mlbpark.donga.com/mp/stats"
+
+MATCH_STATE_BEFORE = 1
+MATCH_STATE_PLAYING = 2
+MATCH_STATE_END = 3
+MATCH_STATE_CANCEL = 4
+MATCH_STATE_RAIN_COLD = 5
+
+POSITION_CODE_MAP = {
+    1: "P",
+    2: "C",
+    3: "1B",
+    4: "2B",
+    5: "3B",
+    6: "SS",
+    7: "LF",
+    8: "CF",
+    9: "RF",
+    10: "DH",
+    11: "DH",
+    12: "DH",
+    13: "IF",
+    14: "OF",
+}
+
+
+def _wait(rate_limiter: "RequestsRateLimiter | None") -> None:
+    if rate_limiter is not None:
+        rate_limiter.wait()
+
+
+def _request_json(
+    driver: Any,
+    endpoint: str,
+    data: dict[str, Any],
+    referer: str,
+    rate_limiter: "RequestsRateLimiter | None" = None,
+) -> dict[str, Any]:
+    if driver is None or not hasattr(driver, "post_json"):
+        raise ValueError("MLBPARK driver is not ready")
+
+    _wait(rate_limiter)
+    try:
+        payload = driver.post_json(
+            f"{MLBPARK_API_ROOT}{endpoint}",
+            data=data,
+            referer=referer,
         )
-    
-    # 로그인 필요 감지
-    if "로그인 후 이용 가능" in page_source or "location.href='/member/?m=login" in page_source:
-        raise StatizLoginRequiredError(
-            f"로그인이 필요합니다. 세션이 만료되었거나 로그인에 실패했습니다. URL: {url[:80]}"
-        )
+    except Exception:
+        if rate_limiter is not None:
+            rate_limiter.on_forbidden()
+        raise
+
+    if rate_limiter is not None:
+        rate_limiter.on_success()
+    return payload
 
 
-# Batting stats columns (statiz.co.kr format)
-BAT_COLUMNS = [
-    "Rank", "Name", "ID", "Team", "POS", "WAR", "G", "oWAR", "dWAR", 
-    "PA", "ePA", "AB", "R", "H", "2B", "3B", "HR", "TB", 
-    "RBI", "SB", "CS", "BB", "HP", "IB", "SO", "GDP", "SH", "SF", 
-    "AVG", "OBP", "SLG", "OPS", "R/ePA", "wRC+", "WAR"
-]
+def _coerce_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
-# Pitching stats columns (statiz.co.kr format)
-PIT_COLUMNS = [
-    "Rank", "Name", "ID", "Team", "POS", "WAR", "G", "GS", "GR", 
-    "GF", "CG", "SHO", "W", "L", "S", "HD", "IP", "ER", "R", 
-    "rRA", "TBF", "H", "2B", "3B", "HR", "BB", "HP", "IB", "SO", 
-    "ROE", "BK", "WP", "ERA", "RA9", "rRA9", "rRA9pf", "FIP", "WHIP", "WAR"
-]
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_position(position_code: Any) -> str | None:
+    position_int = _coerce_int(position_code)
+    if position_int is None:
+        return None
+    return POSITION_CODE_MAP.get(position_int)
+
+
+def _get_team_name(team_name: Any, team_code: Any) -> str:
+    if team_name is not None and str(team_name).strip():
+        return str(team_name).strip()
+
+    code_int = _coerce_int(team_code)
+    if code_int is None:
+        return ""
+    return TEAM_ID_MAP.get(str(code_int), str(code_int))
+
+
+def _get_season_stats(
+    driver: Any,
+    rate_limiter: "RequestsRateLimiter | None",
+    year: int,
+) -> dict[str, Any]:
+    cache_key = str(year)
+    cache = getattr(driver, "_season_stats_cache", None)
+    if isinstance(cache, dict) and cache_key in cache:
+        return cache[cache_key]
+
+    payload = _request_json(
+        driver,
+        "/player/seasonStats.php",
+        {"year": str(year)},
+        referer=f"{MLBPARK_STATS_ROOT}/batter.php?year={year}",
+        rate_limiter=rate_limiter,
+    )
+
+    if isinstance(cache, dict):
+        cache[cache_key] = payload
+    return payload
+
+
+def _get_player_position(
+    driver: Any,
+    player_id: str,
+    rate_limiter: "RequestsRateLimiter | None",
+) -> str | None:
+    cache = getattr(driver, "_player_info_cache", None)
+    if isinstance(cache, dict) and player_id in cache:
+        cached = cache[player_id]
+        if isinstance(cached, dict):
+            cached_position = cached.get("position")
+            if cached_position is None or isinstance(cached_position, str):
+                return cached_position
+
+    payload = _request_json(
+        driver,
+        "/player/info.php",
+        {"p_no": player_id},
+        referer=f"{MLBPARK_STATS_ROOT}/playerDetail.php?pNo={player_id}",
+        rate_limiter=rate_limiter,
+    )
+    player = payload.get("player", {}) if isinstance(payload, dict) else {}
+    position = _normalize_position(player.get("position"))
+
+    if isinstance(cache, dict):
+        cache[player_id] = {"position": position}
+    return position
 
 
 def load_statiz_bat(
     driver: Any,
-    rate_limiter: "RateLimiter | None" = None,
-    year: int | None = None
+    rate_limiter: Any = None,
+    year: int | None = None,
 ) -> pd.DataFrame:
-    """Load batter statistics from statiz.co.kr.
-    
-    Args:
-        driver: Selenium WebDriver (must be logged in)
-        rate_limiter: Optional rate limiter
-        year: Season year (default 2025)
-        
-    Returns:
-        pd.DataFrame: Batter statistics indexed by player ID
-    """
     year = year or get_business_year()
-    if rate_limiter:
-        rate_limiter.wait()
-    
-    url = (
-        f"https://statiz.co.kr/stats/?m=main&m2=batting&m3=default"
-        f"&so=WAR&ob=DESC&year={year}"
-        f"&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha="
-        f"&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba="
-        f"&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls="
-        f"&sf1=&sk1=&sv1=&sf2=&sk2=&sv2="
-    )
-    
-    driver.get(url)
-    time.sleep(2)
-    
-    page_source = driver.page_source
-    _check_page_errors(page_source, url)
-    
-    soup = BeautifulSoup(page_source, 'html.parser')
-    tables = soup.find_all("table")
-    if not tables:
-        return pd.DataFrame(columns=BAT_COLUMNS)
-    
-    bat_chart = tables[0]
-    
-    bat = pd.DataFrame(columns=BAT_COLUMNS)
-    rows = bat_chart.find_all("tr")
-    
-    for i in range(2, len(rows)):
-        tr = rows[i]
-        if tr.find("th") is not None:
+    payload = _get_season_stats(driver, rate_limiter, year)
+    result_list = payload.get("resultList", {}) if isinstance(payload, dict) else {}
+    records = result_list.get("playerSeasonBatterRecordList", []) if isinstance(result_list, dict) else []
+
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        player_id = str(record.get("p_no", "")).strip()
+        player_name = str(record.get("p_name", "")).strip()
+        if not player_id or not player_name:
             continue
-        
-        row = {}
-        column_idx = 0
-        tds = tr.find_all("td")
-        
-        for j in range(32):
-            if j >= len(tds):
-                break
-                
-            td_text = tds[j].text
-            
-            if j == 1:  # Name column (also extract ID from link)
-                a_tag = tds[j].find('a')
-                player_id = a_tag['href'].split('p_no=')[-1] if a_tag else ""
-                row[BAT_COLUMNS[column_idx]] = td_text
-                column_idx += 1
-                row[BAT_COLUMNS[column_idx]] = player_id
-                column_idx += 1
-            elif j == 2:  # Team/Position column
-                img = tds[j].find('img')
-                team = get_team_from_svg(img['src'], year) if img else ""
-                row[BAT_COLUMNS[column_idx]] = team
-                column_idx += 1
-                spans = tds[j].find_all('span')
-                pos = spans[-1].text if spans else ""
-                row[BAT_COLUMNS[column_idx]] = pos
-                column_idx += 1
-            else:
-                row[BAT_COLUMNS[column_idx]] = td_text
-                column_idx += 1
-        
-        row_df = pd.DataFrame([row], columns=BAT_COLUMNS)
-        bat = pd.concat([bat, row_df], ignore_index=True)
-    
-    # Remove duplicate columns
-    bat = bat.loc[:, ~bat.columns.duplicated()]
-    bat = bat.dropna(subset=['Name', 'ID'])
-    bat = bat[(bat['Name'].astype(str).str.strip() != '') & (bat['ID'].astype(str).str.strip() != '')]
-    
-    # Convert oWAR to float
-    bat['oWAR'] = bat['oWAR'].replace('', 0).astype(float)
-    
-    # Set index and sort
-    bat = bat.set_index(keys='ID')
-    bat = bat.sort_values(by='oWAR', ascending=False)
-    bat['Rank'] = range(1, len(bat) + 1)
-    
+
+        rows.append(
+            {
+                "ID": player_id,
+                "Name": player_name,
+                "Team": _get_team_name(record.get("t_name"), record.get("t_code")),
+                "POS": _get_player_position(driver, player_id, rate_limiter),
+                "G": _coerce_int(record.get("game_count")),
+                "PA": _coerce_int(record.get("batting_pa")),
+                "AVG": _coerce_float(record.get("batting_avg")),
+                "oWAR": _coerce_float(record.get("batting_waroff")),
+                "WAR": _coerce_float(record.get("batting_war")),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=pd.Index(BAT_COLUMNS))
+
+    bat = pd.DataFrame(rows)
+    bat = bat.dropna(subset=["ID", "Name"])
+    bat = bat.set_index("ID", drop=False)
+    bat = bat.sort_values(by="oWAR", ascending=False, na_position="last")
     return bat
 
 
 def load_statiz_pit(
     driver: Any,
-    rate_limiter: "RateLimiter | None" = None,
-    year: int | None = None
+    rate_limiter: Any = None,
+    year: int | None = None,
 ) -> pd.DataFrame:
-    """Load pitcher statistics from statiz.co.kr.
-    
-    Args:
-        driver: Selenium WebDriver (must be logged in)
-        rate_limiter: Optional rate limiter
-        year: Season year (default 2025)
-        
-    Returns:
-        pd.DataFrame: Pitcher statistics indexed by player ID
-    """
     year = year or get_business_year()
-    if rate_limiter:
-        rate_limiter.wait()
-    
-    url = (
-        f"https://statiz.co.kr/stats/?m=main&m2=pitching&m3=default"
-        f"&so=WAR&ob=DESC&year={year}"
-        f"&sy=&ey=&te=&po=&lt=10100&reg=A&pe=&ds=&de=&we=&hr=&ha="
-        f"&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba="
-        f"&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls="
-        f"&sf1=&sk1=&sv1=&sf2=&sk2=&sv2="
-    )
-    
-    driver.get(url)
-    time.sleep(2)
-    
-    page_source = driver.page_source
-    _check_page_errors(page_source, url)
-    
-    soup = BeautifulSoup(page_source, 'html.parser')
-    tables = soup.find_all("table")
-    if not tables:
-        return pd.DataFrame(columns=PIT_COLUMNS)
-    
-    pit_chart = tables[0]
-    
-    pit = pd.DataFrame(columns=PIT_COLUMNS)
-    rows = pit_chart.find_all("tr")
-    
-    for i in range(2, len(rows)):
-        tr = rows[i]
-        if tr.find("th") is not None:
+    payload = _get_season_stats(driver, rate_limiter, year)
+    result_list = payload.get("resultList", {}) if isinstance(payload, dict) else {}
+    records = result_list.get("playerSeasonPitcherRecordList", []) if isinstance(result_list, dict) else []
+
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        player_id = str(record.get("p_no", "")).strip()
+        player_name = str(record.get("p_name", "")).strip()
+        if not player_id or not player_name:
             continue
-        
-        row = {}
-        column_idx = 0
-        tds = tr.find_all("td")
-        
-        for j in range(36):
-            if j >= len(tds):
-                break
-                
-            td_text = tds[j].text
-            
-            if j == 1:  # Name column (also extract ID from link)
-                a_tag = tds[j].find('a')
-                player_id = a_tag['href'].split('p_no=')[-1] if a_tag else ""
-                row[PIT_COLUMNS[column_idx]] = td_text
-                column_idx += 1
-                row[PIT_COLUMNS[column_idx]] = player_id
-                column_idx += 1
-            elif j == 2:  # Team/Position column
-                img = tds[j].find('img')
-                team = get_team_from_svg(img['src'], year) if img else ""
-                row[PIT_COLUMNS[column_idx]] = team
-                column_idx += 1
-                spans = tds[j].find_all('span')
-                pos = spans[-1].text if spans else ""
-                row[PIT_COLUMNS[column_idx]] = pos
-                column_idx += 1
-            else:
-                row[PIT_COLUMNS[column_idx]] = td_text
-                column_idx += 1
-        
-        row_df = pd.DataFrame([row], columns=PIT_COLUMNS)
-        pit = pd.concat([pit, row_df], ignore_index=True)
-    
-    # Remove duplicate columns
-    pit = pit.loc[:, ~pit.columns.duplicated()]
-    pit = pit.dropna(subset=['Name', 'ID'])
-    pit = pit[(pit['Name'].astype(str).str.strip() != '') & (pit['ID'].astype(str).str.strip() != '')]
-    
-    # Convert WAR to float
-    pit['WAR'] = pit['WAR'].replace('', 0).astype(float)
-    
-    # Set index and sort
-    pit = pit.set_index(keys='ID')
-    pit = pit.sort_values(by='WAR', ascending=False)
-    pit['Rank'] = range(1, len(pit) + 1)
-    
+
+        rows.append(
+            {
+                "ID": player_id,
+                "Name": player_name,
+                "Team": _get_team_name(record.get("t_name"), record.get("t_code")),
+                "G": _coerce_int(record.get("game_count")),
+                "IP": _coerce_float(record.get("pitching_ip")),
+                "ERA": _coerce_float(record.get("pitching_era")),
+                "WHIP": _coerce_float(record.get("pitching_whip")),
+                "WAR": _coerce_float(record.get("pitching_war")),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=pd.Index(PIT_COLUMNS))
+
+    pit = pd.DataFrame(rows)
+    pit = pit.dropna(subset=["ID", "Name"])
+    pit = pit.set_index("ID", drop=False)
+    pit = pit.sort_values(by="WAR", ascending=False, na_position="last")
     return pit
 
 
 def get_updated_teams(
     driver: Any,
-    rate_limiter: "RateLimiter | None" = None,
-    year: int | None = None
-) -> Set[str]:
-    """Get set of teams that have updated stats for today.
-    
-    Checks daily pitching situation stats to determine which teams
-    have had their data updated.
-    
-    Args:
-        driver: Selenium WebDriver (must be logged in)
-        rate_limiter: Optional rate limiter
-        year: Season year (default 2025)
-        
-    Returns:
-        Set[str]: Set of team names with updated stats
-    """
+    rate_limiter: Any = None,
+    year: int | None = None,
+) -> set[str]:
     year = year or get_business_year()
-    today = get_date()
-    today_month = int(today.split('/')[0])
-    today_day = int(today.split('/')[1])
-    
-    if rate_limiter:
-        rate_limiter.wait()
-    
-    date_str = f"{str(today_month).zfill(2)}-{str(today_day).zfill(2)}"
-    url = (
-        f"https://statiz.co.kr/stats/?m=main&m2=pitching&m3=situation1"
-        f"&so=ERA&ob=ASC&year={year}"
-        f"&sy=&ey=&te=&po=&lt=10100&reg=A&pe=I"
-        f"&ds={date_str}&de={date_str}"
-        f"&we=&hr=&ha=&ct=&st=&vp=&bo=&pt=&pp=&ii=&vc=&um=&oo=&rr=&sc=&bc=&ba="
-        f"&li=&as=&ae=&pl=&gc=&lr=&pr=500&ph=&hs=&us=&na=&ls="
-        f"&sf1=&sk1=&sv1=&sf2=&sk2=&sv2="
-    )
-    
-    driver.get(url)
-    time.sleep(2)
-    
-    page_source = driver.page_source
-    _check_page_errors(page_source, url)
-    
-    soup = BeautifulSoup(page_source, 'html.parser')
-    tables = soup.find_all("table")
-    if not tables:
-        return set()
-    
-    pit_chart = tables[0]
-    
-    updated = set()
-    rows = pit_chart.find_all("tr")
-    
-    for i in range(2, len(rows)):
-        tr = rows[i]
-        if tr.find("th") is not None:
-            continue
-        tds = tr.find_all("td")
-        if len(tds) > 2:
-            img = tds[2].find('img')
-            if img:
-                team = get_team_from_svg(img['src'], year)
+    payload = _get_season_stats(driver, rate_limiter, year)
+    result_list = payload.get("resultList", {}) if isinstance(payload, dict) else {}
+    updated: set[str] = set()
+    if isinstance(result_list, dict):
+        for key in ("playerSeasonBatterRecordList", "playerSeasonPitcherRecordList"):
+            for record in result_list.get(key, []):
+                team = _get_team_name(record.get("t_name"), record.get("t_code"))
                 if team:
                     updated.add(team)
-    
     return updated
+
+
+def _extract_schedule_games(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    result_list = payload.get("resultList", []) if isinstance(payload, dict) else []
+    if isinstance(result_list, list):
+        return [game for game in result_list if isinstance(game, dict)]
+    if isinstance(result_list, dict):
+        games = result_list.get("gameScheduleList", [])
+        return [game for game in games if isinstance(game, dict)]
+    return []
+
+
+def _decode_team_info(raw_team_info: Any) -> dict[str, Any]:
+    if not raw_team_info or not isinstance(raw_team_info, str):
+        return {}
+    try:
+        decoded = json.loads(raw_team_info)
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _game_team_name(game: dict[str, Any], side: str) -> str:
+    info = _decode_team_info(game.get(f"{side}_team_info"))
+    if info:
+        return _get_team_name(info.get("t_name"), info.get("t_code"))
+    return _get_team_name(None, game.get(f"{side}_team"))
+
+
+def _build_games_dataframe(games: list[dict[str, Any]], date_label: str) -> tuple[pd.DataFrame, int]:
+    if not games:
+        return pd.DataFrame([["오늘은 경기가 없습니다."]]), 0
+
+    rows: list[list[Any]] = []
+    game_number = 0
+    updated_number = 0
+    started_number = 0
+
+    for game in games:
+        away_team = _game_team_name(game, "away")
+        home_team = _game_team_name(game, "home")
+        if not away_team or not home_team:
+            continue
+
+        state = _coerce_int(game.get("s_state")) or 0
+        away_score = _coerce_int(game.get("away_score"))
+        home_score = _coerce_int(game.get("home_score"))
+
+        if state == MATCH_STATE_CANCEL:
+            rows.append([away_team, "우천취소", home_team])
+            continue
+
+        if state in {MATCH_STATE_END, MATCH_STATE_RAIN_COLD}:
+            score_text = f"{away_score or 0} : {home_score or 0}"
+            rows.append([away_team, score_text, home_team])
+            game_number += 1
+            updated_number += 1
+            started_number += 1
+            continue
+
+        if state == MATCH_STATE_PLAYING:
+            rows.append([away_team, "진행 중", home_team])
+            game_number += 1
+            started_number += 1
+            continue
+
+        rows.append([away_team, "시작 전", home_team])
+        game_number += 1
+
+    if not rows:
+        return pd.DataFrame([["오늘은 경기가 없습니다."]]), 0
+
+    rows.insert(0, [f"업데이트 : {updated_number}/{game_number}경기", "", ""])
+    rows.insert(0, [f"경기 날짜 : {date_label}", "", ""])
+    return pd.DataFrame(rows), started_number
 
 
 def update_games(
     driver: Any,
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: Any = None,
     return_type: str = "df",
-    year: int | None = None
-) -> Tuple[pd.DataFrame, int] | pd.DataFrame:
-    """Get today's game schedule and update status.
-    
-    Scrapes the schedule page for today's games and checks which
-    have been updated in the stats.
-    
-    Args:
-        driver: Selenium WebDriver (must be logged in)
-        rate_limiter: Optional rate limiter
-        return_type: "df" for DataFrame only, "started" for tuple with started count
-        year: Season year (default 2025)
-        
-    Returns:
-        If return_type == "df": pd.DataFrame with game info
-        If return_type == "started": Tuple[pd.DataFrame, int] (games df, started game count)
-    """
-    year = year or get_business_year()
-    today = get_date()
-    today_month = int(today.split('/')[0])
-    today_day = int(today.split('/')[1])
-    
-    # Get schedule
-    if rate_limiter:
-        rate_limiter.wait()
-    
-    url = f"https://statiz.co.kr/schedule/?year={year}&month={today_month}"
-    driver.get(url)
-    time.sleep(2)
-    
-    page_source = driver.page_source
-    _check_page_errors(page_source, url)
-    
-    soup = BeautifulSoup(page_source, 'html.parser')
-    tables = soup.find_all("table")
-    if not tables:
-        games = [["오늘은 경기가 없습니다."]]
-        df = pd.DataFrame(games)
-        return df if return_type == "df" else (df, 0)
-    
-    calendar = tables[0]
-    rows = calendar.find_all("tr")
-    
-    # Find today's cell
-    temp = None
-    for i in range(1, len(rows)):
-        tr = rows[i]
-        if tr.find("th") is not None:
-            continue
-        for j in range(7):
-            tds = tr.find_all("td")
-            if j >= len(tds):
-                continue
-            td = tds[j]
-            day_span = td.find('span', class_='day')
-            if day_span is None:
-                continue
-            day = day_span.text
-            if int(day) == today_day:
-                temp = td
-                break
-        if temp:
-            break
-    
-    if temp is None:
-        games = [["오늘은 경기가 없습니다."]]
-        df = pd.DataFrame(games)
-        return df if return_type == "df" else (df, 0)
-    
-    # Parse games from today's cell
-    games = []
-    for li in temp.find_all('li'):
-        link = li.find('a', href=True)
-        href = link['href'] if link and link.has_attr('href') else ''
-        game_info = []
-        for span in li.find_all('span'):
-            game_info.append(span.text)
-        if game_info:
-            games.append((game_info, href))
-    
-    game_number = 0
-    updated_number = 0
-    started_number = 0
-    
-    if not games:
-        games = [["오늘은 경기가 없습니다."]]
-    else:
-        for i, game_entry in enumerate(games):
-            game, href = game_entry
-            if len(game) == 4:
-                is_summary = 'summary' in href
-                is_gamelogs = 'gamelogs' in href
-                is_preview = 'preview' in href
-                if is_summary and not is_gamelogs:
-                    games[i] = [game[0], f"{game[1]} : {game[2]}", game[3]]
-                    game_number += 1
-                    updated_number += 1
-                    started_number += 1
-                elif is_gamelogs:
-                    games[i] = [game[0], "진행 중", game[3]]
-                    game_number += 1
-                    started_number += 1
-                elif is_preview:
-                    games[i] = [game[0], "시작 전", game[3]]
-                    game_number += 1
-                else:
-                    games[i] = [game[0], "업데이트 전", game[3]]
-                    game_number += 1
-                    started_number += 1
-            elif len(game) == 3 and game[1] == "우천취소":
-                games[i] = [game[0], "우천취소", game[2]]
-            elif len(game) == 3:
-                is_gamelogs = 'gamelogs' in href
-                is_preview = 'preview' in href
-                if is_gamelogs:
-                    games[i] = [game[0], "진행 중", game[2]]
-                    started_number += 1
-                elif is_preview:
-                    games[i] = [game[0], "시작 전", game[2]]
-                else:
-                    games[i] = [game[0], "업데이트 전", game[2]]
-                    started_number += 1
-                game_number += 1
-        
-        games.insert(0, [f"업데이트 : {updated_number}/{game_number}경기", "", ""])
-    
-    games.insert(0, [f"경기 날짜 : {today}", "", ""])
-    
-    df = pd.DataFrame(games)
-    
-    if return_type == "df":
-        return df
-    else:
+    year: int | None = None,
+) -> tuple[pd.DataFrame, int] | pd.DataFrame:
+    today = get_business_date()
+    date_key = today.strftime("%Y%m%d")
+    date_label = today.strftime("%m/%d")
+
+    payload = _request_json(
+        driver,
+        "/game/schedule.php",
+        {"dateKey": date_key},
+        referer=f"{MLBPARK_STATS_ROOT}/schedule.php?date={date_key}",
+        rate_limiter=rate_limiter,
+    )
+    games = _extract_schedule_games(payload)
+    df, started_number = _build_games_dataframe(games, date_label)
+    if return_type == "started":
         return df, started_number
+    return df
 
 
 __all__ = [
@@ -479,4 +374,6 @@ __all__ = [
     "PIT_COLUMNS",
     "StatizBlockedError",
     "StatizLoginRequiredError",
+    "_build_games_dataframe",
+    "_normalize_position",
 ]

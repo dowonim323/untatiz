@@ -15,10 +15,10 @@ from playwright.sync_api import Error as PlaywrightError, TimeoutError as Playwr
 
 from app.core.db import DatabaseManager
 from app.core.utils import get_business_year, get_date, get_time_status
-from app.scraper.parsers import get_updated_teams, update_games
+from app.scraper.parsers import update_games
 
 if TYPE_CHECKING:
-    from statiz_utils import RateLimiter
+    from app.scraper.client import RequestsRateLimiter
 
 
 WebDriver = Any
@@ -208,13 +208,13 @@ def get_war_status(db_path: Path) -> int:
 
 def get_team_status(
     driver: "WebDriver",
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None
 ) -> Tuple[int, int, int]:
     """Get game status for today.
     
     Args:
-        driver: Selenium WebDriver
+        driver: Scraper driver/session wrapper
         rate_limiter: Optional rate limiter
         year: Season year
         
@@ -241,16 +241,15 @@ def get_team_status(
 
 def get_playing_teams(
     driver: "WebDriver",
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None
 ) -> Set[str]:
     """Get the set of teams playing in today's games.
     
-    Extracts team names from the game schedule. This is different from
-    get_updated_teams() which returns teams that have already updated stats.
+    Extracts team names from the game schedule for the current business date.
     
     Args:
-        driver: Selenium WebDriver
+        driver: Scraper driver/session wrapper
         rate_limiter: Optional rate limiter
         year: Season year
         
@@ -287,7 +286,7 @@ def get_playing_teams(
 
 def has_cancelled_games(
     driver: "WebDriver",
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None
 ) -> bool:
     year = year or get_business_year()
@@ -314,7 +313,7 @@ def has_cancelled_games(
 def persist_schedule_snapshot(
     driver: "WebDriver",
     db_path: Path,
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None,
 ) -> str:
     year = year or get_business_year()
@@ -334,24 +333,23 @@ def check_should_update(
     driver: "WebDriver",
     state: Dict,
     db_path: Path,
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None,
     force_check: bool = False,
 ) -> Tuple[bool, Dict, str]:
     """State machine based update detection algorithm.
     
     State Machine:
-        HOURLY -> EVERY_10MIN: When games start (started > 0)
-        EVERY_10MIN -> EVERY_5MIN: When all games finished (updated == total)
-        EVERY_5MIN -> HOURLY: After WAR update detected (all playing teams in updated_teams)
+        EVERY_30MIN -> EVERY_5MIN: When games start (started > 0)
+        EVERY_5MIN -> full update: When all active games are final (updated == total)
+        EVERY_5MIN -> HOURLY: After the full update marks WAR completion in the DB
     
     Check Frequencies:
-        HOURLY: Only at :00
-        EVERY_10MIN: At :00, :10, :20, :30, :40, :50
+        EVERY_30MIN: At :00 and :30
         EVERY_5MIN: At :00, :05, :10, :15, :20, :25, :30, :35, :40, :45, :50, :55
     
     Args:
-        driver: Selenium WebDriver
+        driver: Scraper driver/session wrapper
         state: Previous execution state
         db_path: Path to database
         rate_limiter: Optional rate limiter
@@ -394,7 +392,6 @@ def check_should_update(
             current_mode = UpdateMode.EVERY_30MIN
             base_state["mode"] = current_mode.value
     
-    # Get current game status (Selenium)
     started, updated, total = get_team_status(driver, rate_limiter, year)
     
     # Build new state template
@@ -440,27 +437,15 @@ def check_should_update(
         if updated < total:
             return False, new_state, f"every_5min: waiting for game final ({updated}/{total})"
 
-        updated_teams = get_updated_teams(driver, rate_limiter, year)
-        playing_teams = get_playing_teams(driver, rate_limiter, year)
-        
-        new_state["team_previous"] = updated_teams
-        
-        if playing_teams and playing_teams.issubset(updated_teams):
-            print(f"[Scheduler] EVERY_5MIN ready for full update")
-            print(f"[Scheduler] Playing teams: {playing_teams}")
-            print(f"[Scheduler] Updated teams: {updated_teams}")
-            return True, new_state, "every_5min: ready for full update"
-        
-        # WAR not yet updated for all teams
-        missing = playing_teams - updated_teams if playing_teams else set()
-        return False, new_state, f"every_5min: waiting for WAR ({len(missing)} teams pending)"
+        print("[Scheduler] EVERY_5MIN ready for full update")
+        return True, new_state, "every_5min: ready for full update"
 
 
 def run_update(
     driver: "WebDriver",
     db_path: Path,
     backup_dir: Path,
-    rate_limiter: "RateLimiter | None" = None,
+    rate_limiter: "RequestsRateLimiter | None" = None,
     year: int | None = None,
     webhook_url: str | None = None,
 ) -> tuple[bool, str, bool]:
@@ -469,7 +454,7 @@ def run_update(
     Loads data, scrapes stats, calculates WAR, and updates database.
     
     Args:
-        driver: Selenium WebDriver
+        driver: Scraper driver/session wrapper
         db_path: Path to database
         backup_dir: Path for backup directory
         rate_limiter: Optional rate limiter
@@ -499,7 +484,8 @@ def run_update(
             season_id=active_season_id,
         )
         
-        games = update_games(driver, rate_limiter, "df", year)
+        games_result = update_games(driver, rate_limiter, "df", year)
+        games = games_result[0] if isinstance(games_result, tuple) else games_result
         bat = load_statiz_bat(driver, rate_limiter, year)
         pit = load_statiz_pit(driver, rate_limiter, year)
         
