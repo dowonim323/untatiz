@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import random
 import time
 from pathlib import Path
@@ -46,45 +45,10 @@ class _MLBParkDriver:
         "Chrome/123.0.0.0 Safari/537.36"
     )
 
-    def __init__(self, session: requests.Session, cache_path: Optional[Path] = None):
+    def __init__(self, session: requests.Session):
         self.session = session
-        self.cache_path = cache_path
         self._season_stats_cache: dict[str, dict[str, Any]] = {}
         self._player_info_cache: dict[str, dict[str, Any]] = {}
-        self._load_caches()
-
-    def _load_caches(self) -> None:
-        if self.cache_path is None or not self.cache_path.exists():
-            return
-
-        try:
-            cached = json.loads(self.cache_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
-
-        player_info_cache = cached.get("player_info")
-        if isinstance(player_info_cache, dict):
-            self._player_info_cache = {
-                str(player_id): value
-                for player_id, value in player_info_cache.items()
-                if isinstance(value, dict)
-            }
-
-    def save_caches(self) -> None:
-        if self.cache_path is None:
-            return
-
-        try:
-            self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {
-                "player_info": self._player_info_cache,
-            }
-            self.cache_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-        except OSError:
-            return
 
     def build_headers(self, referer: str) -> dict[str, str]:
         return {
@@ -114,10 +78,7 @@ class _MLBParkDriver:
         return response.json()
 
     def quit(self) -> None:
-        try:
-            self.save_caches()
-        finally:
-            self.session.close()
+        self.session.close()
 
 
 class StatizClient:
@@ -192,18 +153,13 @@ class StatizClient:
     def is_ready(self) -> bool:
         return self._driver is not None and self._session is not None
 
-    def _cache_path(self) -> Optional[Path]:
-        if self.state_dir is None:
-            return None
-        return self.state_dir / "player_info_cache.json"
-
     def create_driver(self) -> _MLBParkDriver:
         session = requests.Session()
         session.headers.update({
             "User-Agent": _MLBParkDriver.DEFAULT_USER_AGENT,
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         })
-        return _MLBParkDriver(session=session, cache_path=self._cache_path())
+        return _MLBParkDriver(session=session)
 
     def _initialize_driver(self) -> bool:
         self._cleanup_driver()

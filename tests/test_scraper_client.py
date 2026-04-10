@@ -54,5 +54,5 @@ def test_statiz_client_persists_player_info_cache(tmp_path: Path):
     reloaded_client = StatizClient(state_dir=tmp_path)
     assert reloaded_client.rotate() is True
     assert reloaded_client.driver is not None
-    assert reloaded_client.driver._player_info_cache["12922"]["position"] == "SS"
+    assert reloaded_client.driver._player_info_cache == {}
     reloaded_client.cleanup()
