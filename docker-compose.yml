@@ -1,0 +1,74 @@
+# Untatiz Docker Compose Configuration
+# 단일 컨테이너에서 Scraper + Discord Bot + Web Server 운영
+
+version: '3.8'
+
+services:
+  untatiz:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: untatiz
+    restart: unless-stopped
+    shm_size: "4gb"
+    tmpfs:
+      - /dev/shm:size=4g
+    
+    # 포트 매핑
+    ports:
+      - "5000:5000"  # Flask Web Server
+    
+    # 볼륨 마운트
+    volumes:
+      # 데이터베이스 (영구 저장)
+      - ./db:/app/db
+      # 로그 (영구 저장)
+      - ./log:/app/log
+      - ./backup:/app/backup
+      # 그래프 이미지 (영구 저장)
+      - ./graph:/app/graph
+      # 뉴스 데이터 (영구 저장)
+      - ./news:/app/news
+      - ./api:/app/api:ro
+    
+    # 환경변수
+    environment:
+      # 타임존
+      - TZ=Asia/Seoul
+      
+      # Flask 설정
+      - FLASK_ENV=production
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-auto_generated}
+      
+      # Python 설정
+      - PYTHONUNBUFFERED=1
+    
+    # 헬스체크
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 리소스 제한 (선택적)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # 로깅 설정
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 네트워크 설정 (선택적)
+networks:
+  default:
+    name: untatiz-network
