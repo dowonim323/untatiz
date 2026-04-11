@@ -19,14 +19,12 @@ class AppConfig:
     api_dir: Path
     db_dir: Path
     log_dir: Path
-    graph_dir: Path
     news_dir: Path
     db_path: Path
     state_file: Path
 
     flask_secret_key: str
     flask_env: str
-    database_path: str
 
     discord_webhook_url: Optional[str]
     openai_api_key: Optional[str]
@@ -34,7 +32,6 @@ class AppConfig:
     openai_model: str
     league_name: str
 
-    credentials_path: Path
     discord_config_path: Path
     openai_config_path: Path
 
@@ -53,10 +50,8 @@ def load_config() -> AppConfig:
     api_dir = BASE_DIR / "api"
     db_dir = BASE_DIR / "db"
     log_dir = BASE_DIR / "log"
-    graph_dir = BASE_DIR / "graph"
     news_dir = BASE_DIR / "news"
 
-    credentials_path = api_dir / "credentials.json"
     discord_config_path = api_dir / "discord.json"
     openai_config_path = api_dir / "openai.json"
 
@@ -78,19 +73,16 @@ def load_config() -> AppConfig:
         api_dir=api_dir,
         db_dir=db_dir,
         log_dir=log_dir,
-        graph_dir=graph_dir,
         news_dir=news_dir,
         db_path=db_path,
         state_file=state_file,
         flask_secret_key=os.environ.get("FLASK_SECRET_KEY", "auto_generated"),
         flask_env=os.environ.get("FLASK_ENV", "production"),
-        database_path=str(db_path),
         discord_webhook_url=discord_webhook_url,
         openai_api_key=openai_api_key,
         openai_base_url=openai_base_url,
         openai_model=openai_model,
         league_name=league_name,
-        credentials_path=credentials_path,
         discord_config_path=discord_config_path,
         openai_config_path=openai_config_path,
     )

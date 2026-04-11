@@ -35,9 +35,6 @@ db/
 # API credentials (환경변수로 주입)
 api/
 
-# Graph outputs (볼륨으로 마운트)
-graph/
-
 # News data (볼륨으로 마운트)
 news/
 
