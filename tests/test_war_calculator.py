@@ -14,8 +14,6 @@ from app.services.war_calculator import (
     get_position_group,
     get_war,
     has_supplemental_draft,
-    is_currently_rostered,
-    isactive,
     select_fa_roster,
 )
 
@@ -74,33 +72,6 @@ class TestGetFAConfig:
         assert config.roster_size == 29
         assert config.supplemental_bonus == 5
         assert config.min_pitchers == 11
-
-
-class TestIsCurrentlyRostered:
-    """Test roster status checking."""
-    
-    def test_player_on_roster(self, db_manager):
-        # Add player to roster
-        db_manager.execute(
-            """INSERT INTO roster (team_id, player_id, season_id, joined_date)
-               VALUES ('준', '10001', 1, '2025-03-21')"""
-        )
-        
-        assert is_currently_rostered(db_manager, '10001', 1) is True
-    
-    def test_player_not_on_roster(self, db_manager):
-        assert is_currently_rostered(db_manager, '10001', 1) is False
-    
-    def test_player_released(self, db_manager):
-        # Add player then release
-        db_manager.execute(
-            """INSERT INTO roster (team_id, player_id, season_id, joined_date, left_date)
-               VALUES ('준', '10001', 1, '2025-03-21', '2025-05-01')"""
-        )
-        
-        assert is_currently_rostered(db_manager, '10001', 1) is False
-
-
 class TestCalculatePlayerFAWar:
     """Test FA WAR calculation for individual players."""
     
@@ -575,27 +546,6 @@ class TestHasSupplementalDraft:
         
         result = has_supplemental_draft(db_manager, 1, '2025-06-01')
         assert result is True
-
-
-class TestLegacyFunctions:
-    """Test legacy functions for backward compatibility."""
-    
-    def test_isactive_player_active(self, sample_player_id_df, sample_player_activation_df):
-        """Test isactive with active player."""
-        result = isactive('10001', sample_player_id_df, sample_player_activation_df)
-        assert result is True
-    
-    def test_isactive_player_inactive(self, sample_player_id_df, sample_player_activation_df):
-        """Test isactive with inactive player."""
-        # Player 10006 is in position '1R' for team '뚝' and is marked as False (inactive)
-        result = isactive('10006', sample_player_id_df, sample_player_activation_df)
-        assert result is False
-    
-    def test_isactive_player_not_found(self, sample_player_id_df, sample_player_activation_df):
-        """Test isactive with player not on any roster."""
-        result = isactive('99999', sample_player_id_df, sample_player_activation_df)
-        assert result is False
-    
     def test_get_war_basic(self, sample_bat_df, sample_pit_df, 
                           sample_player_id_df, sample_player_activation_df,
                           sample_war_basis_df):

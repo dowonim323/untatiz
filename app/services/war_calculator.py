@@ -114,25 +114,6 @@ def get_position_group(position: Optional[str]) -> str:
         return 'NONE'
 
 
-def is_currently_rostered(db: DatabaseManager, player_id: str, season_id: int) -> bool:
-    """Check if player is currently on a fantasy team roster.
-    
-    Args:
-        db: DatabaseManager instance
-        player_id: Player ID
-        season_id: Season ID
-        
-    Returns:
-        True if player is on a roster (left_date is NULL)
-    """
-    result = db.fetch_one(
-        """SELECT 1 FROM roster 
-           WHERE player_id = ? AND season_id = ? AND left_date IS NULL""",
-        (player_id, season_id)
-    )
-    return result is not None
-
-
 def is_rostered_on_date(
     db: DatabaseManager,
     player_id: str,
@@ -163,23 +144,6 @@ def get_player_application_date(
         (player_id, season_id),
     )
     return result[0] if result and result[0] else None
-
-
-def get_war_on_or_before(
-    db: DatabaseManager,
-    player_id: str,
-    season_id: int,
-    target_date: str,
-) -> float:
-    result = db.fetch_one(
-        """SELECT war FROM war_daily
-           WHERE player_id = ? AND season_id = ? AND date <= ?
-           ORDER BY date DESC, id DESC LIMIT 1""",
-        (player_id, season_id, target_date),
-    )
-    return float(result[0]) if result and result[0] is not None else 0.0
-
-
 def get_war_before(
     db: DatabaseManager,
     player_id: str,
@@ -551,7 +515,7 @@ def calculate_fa_war(
     player_id: pd.DataFrame,
     player_activation: pd.DataFrame,
     current_war: pd.DataFrame,
-    db_path: str = "/home/ubuntu/untatiz/db/untatiz_db.db",
+    db_path: str,
     current_date: str | None = None,
     season_id: int | None = None,
 ) -> float:
@@ -617,39 +581,6 @@ def calculate_fa_total_as_of(
     )
     roster = select_fa_roster(fa_players, config, is_supplemental)
     return round(sum(player.fa_war for player in roster), 2)
-
-
-# Legacy functions for backward compatibility
-
-def isactive(
-    player_id: str, 
-    player_id_df: pd.DataFrame, 
-    player_activation: pd.DataFrame
-) -> bool:
-    """Check if a player is currently active on any team.
-    
-    Args:
-        player_id: Player ID to check
-        player_id_df: DataFrame with player IDs indexed by team
-        player_activation: DataFrame with activation status indexed by team
-        
-    Returns:
-        bool: True if player is active on at least one team
-    """
-    positions = player_id_df.apply(lambda col: col[col == player_id].index.tolist()).dropna()
-    activation = False
-    
-    for col in positions.index:
-        for row in positions[col]:
-            if player_activation.at[row, col]:
-                activation = True
-                break
-        if activation:
-            break
-    
-    return activation
-
-
 def get_war(
     bat: pd.DataFrame,
     pit: pd.DataFrame,
@@ -730,6 +661,5 @@ __all__ = [
     "get_latest_player_war_rows",
     "build_fa_players_from_frames",
     "select_fa_roster",
-    "isactive",
     "get_war",
 ]
