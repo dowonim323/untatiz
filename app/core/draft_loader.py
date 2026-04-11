@@ -859,16 +859,16 @@ Examples:
   python -m app.core.draft_loader config/drafts/2025_main.csv
 
   # Validate without inserting (dry run)
-  python -m app.core.draft_loader config/drafts/2025_main.csv --dry-run
+  python -m app.core.draft_loader config/drafts/2025_main.json --dry-run
 
   # Replace existing picks
-  python -m app.core.draft_loader config/drafts/2025_main.csv --force
+  python -m app.core.draft_loader config/drafts/2025_main.json --force
 
   # Load all drafts for a year
   python -m app.core.draft_loader --year 2025
 
   # Show verbose output
-  python -m app.core.draft_loader config/drafts/2025_main.csv -v
+  python -m app.core.draft_loader config/drafts/2025_main.json -v
         """
     )
     

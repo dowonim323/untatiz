@@ -1,9 +1,0 @@
-# season=2025,draft_type=main,application_date=2025-03-21,description=2025시즌 메인 드래프트
-pick_order,team,round,player_id,player_name
-1,준,용타,15004,김도영
-2,준,용투1,16088,변우혁
-3,준,용투2,16273,성하민
-4,준,1R,XXXXX,선수이름
-5,뚝,용타,XXXXX,선수이름
-6,뚝,용투1,XXXXX,선수이름
-7,뚝,용투2,XXXXX,선수이름
