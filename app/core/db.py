@@ -385,50 +385,6 @@ class DatabaseManager:
         with self.connection() as conn:
             return pd.read_sql_query(query, conn, params=params)
 
-
-# Standalone functions for backward compatibility
-
-def get_connection(db_path: Path) -> sqlite3.Connection:
-    """Get database connection (legacy function)."""
-    return sqlite3.connect(str(db_path))
-
-
-def list_tables(conn: sqlite3.Connection) -> List[str]:
-    """List all tables (legacy function)."""
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    return [table[0] for table in cursor.fetchall()]
-
-
-def load_table(table_name: str, db_path: Path) -> pd.DataFrame:
-    """Load table as DataFrame (legacy function)."""
-    db = DatabaseManager(db_path)
-    return db.load_table(table_name)
-
-
-def save_table(
-    df: pd.DataFrame,
-    table_name: str,
-    db_path: Path,
-    if_exists: str = "replace",
-    index: bool = False
-) -> None:
-    """Save DataFrame to table (legacy function)."""
-    db = DatabaseManager(db_path)
-    db.save_table(df, table_name, if_exists=if_exists, index=index)
-
-
-def backup_database(db_path: Path, backup_dir: Path) -> Path:
-    """Create database backup (legacy function)."""
-    db = DatabaseManager(db_path)
-    return db.backup(backup_dir)
-
-
 __all__ = [
     "DatabaseManager",
-    "get_connection",
-    "list_tables",
-    "load_table",
-    "save_table",
-    "backup_database",
 ]

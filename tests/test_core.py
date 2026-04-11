@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.core.db import DatabaseManager, load_table, save_table, backup_database
+from app.core.db import DatabaseManager
 from app.core.utils import (
     get_date,
     get_time_status,
@@ -148,46 +148,3 @@ class TestUtils:
         """Test getting team name from unknown SVG path."""
         result = get_team_from_svg("/unknown/path.svg", 2025)
         assert result == ""
-
-
-class TestLegacyFunctions:
-    """Tests for legacy standalone functions."""
-    
-    def test_legacy_load_table(self, tmp_path):
-        """Test legacy load_table function."""
-        db_path = tmp_path / "test.db"
-        
-        # Create table first
-        db = DatabaseManager(db_path)
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        db.save_table(df, "legacy_test")
-        
-        # Use legacy function
-        loaded = load_table("legacy_test", db_path)
-        assert len(loaded) == 3
-    
-    def test_legacy_save_table(self, tmp_path):
-        """Test legacy save_table function."""
-        db_path = tmp_path / "test.db"
-        
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        save_table(df, "legacy_test", db_path)
-        
-        # Verify with DatabaseManager
-        db = DatabaseManager(db_path)
-        loaded = db.load_table("legacy_test")
-        assert len(loaded) == 3
-    
-    def test_legacy_backup_database(self, tmp_path):
-        """Test legacy backup_database function."""
-        db_path = tmp_path / "test.db"
-        backup_dir = tmp_path / "backups"
-        
-        # Create table first
-        db = DatabaseManager(db_path)
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        db.save_table(df, "test_table")
-        
-        # Use legacy function
-        backup_path = backup_database(db_path, backup_dir)
-        assert backup_path.exists()
