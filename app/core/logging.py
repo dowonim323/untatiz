@@ -37,20 +37,4 @@ def setup_logging(log_path: Path, level: int = logging.INFO, logger_name: Option
     return logger
 
 
-class StreamToLogger:
-    """Redirect stdout/stderr to logger."""
-
-    def __init__(self, logger: logging.Logger, log_level: int = logging.INFO):
-        self.logger = logger
-        self.log_level = log_level
-        self.linebuf = ''
-
-    def write(self, buf: str):
-        for line in buf.rstrip().splitlines():
-            self.logger.log(self.log_level, line.rstrip())
-
-    def flush(self):
-        pass
-
-
-__all__ = ["setup_logging", "StreamToLogger"]
+__all__ = ["setup_logging"]
