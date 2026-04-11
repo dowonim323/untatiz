@@ -5,6 +5,8 @@ Updated to use normalized Long format schema instead of legacy Wide format.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
@@ -15,7 +17,7 @@ import pandas as pd
 
 from app.core.cache import invalidate_after_update
 from app.core.db import DatabaseManager
-from app.core.utils import get_business_year, get_date, get_kst_timestamp
+from app.core.utils import get_business_year, get_date, get_kst_now, get_kst_timestamp
 from app.services.team_war_daily_writer import write_team_war_daily_for_date
 from app.services.war_calculator import calculate_fa_total_as_of, calculate_fa_war
 
@@ -54,6 +56,249 @@ def _resolve_connection(
 
 def _is_missing_value(value: Any) -> bool:
     return value is None or bool(pd.isna(cast(object, value)))
+
+
+def _coerce_int(value: Any) -> int:
+    if _is_missing_value(value) or str(value).strip() == '':
+        return 0
+    return int(cast(int | float | str, value))
+
+
+def _coerce_float(value: Any, *, digits: int = 3) -> float | None:
+    if _is_missing_value(value) or str(value).strip() == '':
+        return None
+    return round(float(cast(float | int | str, value)), digits)
+
+
+def _ip_to_outs(value: Any) -> int:
+    if _is_missing_value(value):
+        return 0
+
+    text = str(value).strip()
+    if not text:
+        return 0
+
+    if '.' not in text:
+        return _coerce_int(text) * 3
+
+    whole_text, fractional_text = text.split('.', 1)
+    whole_innings = int(whole_text)
+    if fractional_text and fractional_text[0] in {'0', '1', '2'}:
+        return whole_innings * 3 + int(fractional_text[0])
+
+    numeric_value = float(text)
+    whole_innings = int(numeric_value)
+    remainder = numeric_value - whole_innings
+    if abs(remainder - (1 / 3)) < 0.05:
+        return whole_innings * 3 + 1
+    if abs(remainder - (2 / 3)) < 0.05:
+        return whole_innings * 3 + 2
+    return whole_innings * 3
+
+
+def _hash_payload(payload: Any) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
+
+
+def _get_snapshot_run_at() -> str:
+    return get_kst_now().isoformat(timespec='microseconds')
+
+
+def _build_team_source_snapshots(
+    bat: pd.DataFrame,
+    pit: pd.DataFrame,
+    team_names: set[str],
+) -> dict[str, dict[str, Any]]:
+    snapshots: dict[str, dict[str, Any]] = {}
+
+    for team_name in sorted(team_names):
+        bat_entries: list[dict[str, Any]] = []
+        pit_entries: list[dict[str, Any]] = []
+
+        if 'Team' in bat.columns:
+            bat_rows = bat[bat['Team'] == team_name]
+            for player_id, row in bat_rows.iterrows():
+                resolved_id = row.get('ID', player_id)
+                if _is_missing_value(resolved_id) or str(resolved_id).strip() == '':
+                    continue
+                bat_entries.append(
+                    {
+                        'id': str(resolved_id),
+                        'g': _coerce_int(row.get('G')),
+                        'pa': _coerce_int(row.get('PA')),
+                        'owar': _coerce_float(row.get('oWAR')),
+                        'war': _coerce_float(row.get('WAR')),
+                    }
+                )
+
+        if 'Team' in pit.columns:
+            pit_rows = pit[pit['Team'] == team_name]
+            for player_id, row in pit_rows.iterrows():
+                resolved_id = row.get('ID', player_id)
+                if _is_missing_value(resolved_id) or str(resolved_id).strip() == '':
+                    continue
+                pit_entries.append(
+                    {
+                        'id': str(resolved_id),
+                        'g': _coerce_int(row.get('G')),
+                        'ip_outs': _ip_to_outs(row.get('IP')),
+                        'war': _coerce_float(row.get('WAR')),
+                    }
+                )
+
+        bat_entries.sort(key=lambda item: item['id'])
+        pit_entries.sort(key=lambda item: item['id'])
+
+        bat_pa_total = sum(entry['pa'] for entry in bat_entries)
+        pit_outs_total = sum(entry['ip_outs'] for entry in pit_entries)
+        war_payload = {
+            'bat': [[entry['id'], entry['owar'], entry['war']] for entry in bat_entries],
+            'pit': [[entry['id'], entry['war']] for entry in pit_entries],
+        }
+        usage_payload = {
+            'bat': [[entry['id'], entry['g'], entry['pa']] for entry in bat_entries],
+            'pit': [[entry['id'], entry['g'], entry['ip_outs']] for entry in pit_entries],
+        }
+
+        snapshots[team_name] = {
+            'war_hash': _hash_payload(war_payload),
+            'usage_hash': _hash_payload(usage_payload),
+            'bat_pa_total': bat_pa_total,
+            'pit_outs_total': pit_outs_total,
+        }
+
+    return snapshots
+
+
+def _persist_source_team_snapshots(
+    conn: sqlite3.Connection,
+    season_id: int,
+    target_date: str,
+    run_at: str,
+    team_snapshots: dict[str, dict[str, Any]],
+) -> None:
+    for team_name, snapshot in team_snapshots.items():
+        conn.execute(
+            """INSERT OR REPLACE INTO source_team_snapshots
+               (run_at, season_id, target_date, team_name, phase, war_hash, usage_hash, bat_pa_total, pit_outs_total)
+               VALUES (?, ?, ?, ?, 'post_final', ?, ?, ?, ?)""",
+            (
+                run_at,
+                season_id,
+                target_date,
+                team_name,
+                snapshot['war_hash'],
+                snapshot['usage_hash'],
+                snapshot['bat_pa_total'],
+                snapshot['pit_outs_total'],
+            ),
+        )
+
+
+def _get_snapshot_rows_for_run(
+    conn: sqlite3.Connection,
+    season_id: int,
+    target_date: str,
+    run_at: str,
+) -> dict[str, dict[str, Any]]:
+    rows = conn.execute(
+        """SELECT team_name, war_hash, usage_hash, bat_pa_total, pit_outs_total
+           FROM source_team_snapshots
+           WHERE season_id = ? AND target_date = ? AND phase = 'post_final' AND run_at = ?""",
+        (season_id, target_date, run_at),
+    ).fetchall()
+    return {
+        row[0]: {
+            'war_hash': row[1],
+            'usage_hash': row[2],
+            'bat_pa_total': row[3],
+            'pit_outs_total': row[4],
+        }
+        for row in rows
+    }
+
+
+def _get_latest_post_final_snapshot(
+    conn: sqlite3.Connection,
+    season_id: int,
+    target_date: str,
+    *,
+    before_run_at: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    params: list[Any] = [season_id, target_date]
+    run_at_sql = (
+        "SELECT MAX(run_at) FROM source_team_snapshots "
+        "WHERE season_id = ? AND target_date = ? AND phase = 'post_final'"
+    )
+    if before_run_at is not None:
+        run_at_sql += " AND run_at < ?"
+        params.append(before_run_at)
+    row = conn.execute(run_at_sql, params).fetchone()
+    latest_run_at = row[0] if row else None
+    if not latest_run_at:
+        return {}
+    return _get_snapshot_rows_for_run(conn, season_id, target_date, latest_run_at)
+
+
+def _get_latest_prior_date_snapshot(
+    conn: sqlite3.Connection,
+    season_id: int,
+    target_date: str,
+) -> dict[str, dict[str, Any]]:
+    row = conn.execute(
+        """SELECT MAX(target_date)
+           FROM source_team_snapshots
+           WHERE season_id = ? AND target_date < ? AND phase = 'post_final'""",
+        (season_id, target_date),
+    ).fetchone()
+    previous_target_date = row[0] if row else None
+    if not previous_target_date:
+        return {}
+    return _get_latest_post_final_snapshot(conn, season_id, previous_target_date)
+
+
+def _has_required_usage_progress(
+    current_snapshot: dict[str, Any],
+    baseline_snapshot: dict[str, Any] | None,
+) -> bool:
+    current_bat_pa = int(current_snapshot['bat_pa_total'])
+    current_pit_outs = int(current_snapshot['pit_outs_total'])
+
+    if current_bat_pa <= 0 or current_pit_outs <= 0:
+        return False
+
+    if baseline_snapshot is None:
+        return True
+
+    baseline_bat_pa = int(baseline_snapshot['bat_pa_total'])
+    baseline_pit_outs = int(baseline_snapshot['pit_outs_total'])
+
+    return current_bat_pa > baseline_bat_pa and current_pit_outs > baseline_pit_outs
+
+
+def _is_source_war_ready(
+    conn: sqlite3.Connection,
+    season_id: int,
+    target_date: str,
+    team_snapshots: dict[str, dict[str, Any]],
+    played_teams: set[str],
+) -> bool:
+    if not played_teams:
+        return False
+
+    prior_date_snapshot = _get_latest_prior_date_snapshot(conn, season_id, target_date)
+
+    for team_name in played_teams:
+        current_snapshot = team_snapshots.get(team_name)
+        if current_snapshot is None:
+            return False
+
+        baseline_snapshot = prior_date_snapshot.get(team_name)
+        if not _has_required_usage_progress(current_snapshot, baseline_snapshot):
+            return False
+
+    return True
 
 
 def update_db(
@@ -446,6 +691,10 @@ def _update_info_table(
     updated_games = 0
     game_list = []
     no_games = False
+    schedule_complete = False
+    source_war_ready = False
+    publish_ready_at = None
+    has_source_frames = not bat.empty and not pit.empty
     
     if len(games) > 0:
         # Check for "no games" message
@@ -502,12 +751,13 @@ def _update_info_table(
     season_id = _get_season_id(db)
     active_games = [game for game in game_list if game['game_status'] != 'cancelled']
     final_games = [game for game in active_games if game['game_status'] == 'final']
-    has_player_frames = not bat.empty and not pit.empty
-    is_completed = (
-        check_update(bat, pit, games, db, conn=conn, season_id=season_id)
-        if has_player_frames and final_games and len(final_games) == len(active_games)
-        else False
-    )
+    played_teams = {
+        str(team)
+        for game in active_games
+        for team in (game['away_team'], game['home_team'])
+        if str(team).strip()
+    }
+    schedule_complete = bool(active_games) and len(final_games) == len(active_games)
 
     if no_games or not active_games:
         war_status = 'no_games'
@@ -515,23 +765,91 @@ def _update_info_table(
         total_games = 0
     else:
         updated_games = len(final_games)
-        war_status = 'completed' if is_completed else 'pending'
-    
+        if has_source_frames and schedule_complete:
+            team_snapshots = _build_team_source_snapshots(bat, pit, played_teams)
+            snapshot_run_at = _get_snapshot_run_at()
+            snapshot_conn, snapshot_owns_connection = _resolve_connection(db, conn)
+            try:
+                _persist_source_team_snapshots(
+                    snapshot_conn,
+                    season_id,
+                    date_iso,
+                    snapshot_run_at,
+                    team_snapshots,
+                )
+                source_war_ready = _is_source_war_ready(
+                    snapshot_conn,
+                    season_id,
+                    date_iso,
+                    team_snapshots,
+                    played_teams,
+                )
+            finally:
+                if snapshot_owns_connection:
+                    snapshot_conn.commit()
+                    snapshot_conn.close()
+
+        if schedule_complete and source_war_ready:
+            war_status = 'completed'
+            publish_ready_at = now
+        else:
+            war_status = 'pending'
+
     # Update scraper_status table (upsert)
     conn, owns_connection = _resolve_connection(db, conn)
     try:
         cursor = conn.cursor()
         
         cursor.execute("""
-            INSERT INTO scraper_status (id, last_updated_at, target_date, total_games, updated_games, war_status)
-            VALUES (1, ?, ?, ?, ?, ?)
+            INSERT INTO scraper_status (
+                id,
+                last_updated_at,
+                target_date,
+                total_games,
+                updated_games,
+                war_status,
+                schedule_complete,
+                source_war_ready,
+                publish_ready_at,
+                last_full_run_at,
+                last_full_run_status,
+                last_error_message
+            )
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 last_updated_at = excluded.last_updated_at,
                 target_date = excluded.target_date,
                 total_games = excluded.total_games,
                 updated_games = excluded.updated_games,
-                war_status = excluded.war_status
-        """, (now, date_iso, total_games, updated_games, war_status))
+                war_status = excluded.war_status,
+                schedule_complete = excluded.schedule_complete,
+                source_war_ready = excluded.source_war_ready,
+                publish_ready_at = CASE
+                    WHEN scraper_status.target_date != excluded.target_date THEN excluded.publish_ready_at
+                    ELSE COALESCE(excluded.publish_ready_at, scraper_status.publish_ready_at)
+                END,
+                last_full_run_at = CASE
+                    WHEN scraper_status.target_date != excluded.target_date THEN excluded.last_full_run_at
+                    ELSE COALESCE(excluded.last_full_run_at, scraper_status.last_full_run_at)
+                END,
+                last_full_run_status = CASE
+                    WHEN scraper_status.target_date != excluded.target_date THEN excluded.last_full_run_status
+                    ELSE COALESCE(excluded.last_full_run_status, scraper_status.last_full_run_status)
+                END,
+                last_error_message = excluded.last_error_message
+        """, (
+            now,
+            date_iso,
+            total_games,
+            updated_games,
+            war_status,
+            int(schedule_complete),
+            int(source_war_ready),
+            publish_ready_at,
+            now if has_source_frames else None,
+            'success' if has_source_frames else None,
+            None,
+        ))
         
         # Update daily_games table
         for i, game in enumerate(game_list, 1):

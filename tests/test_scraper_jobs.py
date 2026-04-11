@@ -30,7 +30,27 @@ def _create_scraper_tables(db_path) -> None:
             updated_games INTEGER DEFAULT 0,
             war_status TEXT DEFAULT 'pending'
                 CHECK (war_status IN ('pending', 'completed', 'no_games')),
+            schedule_complete INTEGER DEFAULT 0,
+            source_war_ready INTEGER DEFAULT 0,
+            publish_ready_at TEXT,
+            last_full_run_at TEXT,
+            last_full_run_status TEXT
+                CHECK (last_full_run_status IN ('success', 'failed')),
+            last_error_message TEXT,
             created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE source_team_snapshots (
+            run_at TEXT NOT NULL,
+            season_id INTEGER NOT NULL,
+            target_date TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            phase TEXT NOT NULL CHECK (phase IN ('post_final')),
+            war_hash TEXT NOT NULL,
+            usage_hash TEXT NOT NULL,
+            bat_pa_total INTEGER NOT NULL,
+            pit_outs_total INTEGER NOT NULL,
+            PRIMARY KEY (run_at, team_name)
         );
 
         CREATE TABLE daily_games (
@@ -98,7 +118,7 @@ def _create_live_write_tables(db_path) -> None:
     conn.close()
 
 
-def test_update_info_table_marks_completed_when_cancelled_games_remain(temp_db):
+def test_update_info_table_marks_completed_on_first_qualified_post_final_snapshot(temp_db):
     _create_scraper_tables(temp_db)
     db = DatabaseManager(temp_db)
 
@@ -124,12 +144,18 @@ def test_update_info_table_marks_completed_when_cancelled_games_remain(temp_db):
         conn.commit()
 
     bat = pd.DataFrame(
-        [{'Name': '박포수', 'Team': 'LG'}],
-        index=pd.Index(['10002'], name='ID'),
+        [
+            {'Name': '박포수', 'Team': 'LG', 'G': 1, 'PA': 4, 'oWAR': 1.4, 'WAR': 1.4},
+            {'Name': '최타자', 'Team': 'KIA', 'G': 1, 'PA': 4, 'oWAR': 1.1, 'WAR': 1.1},
+        ],
+        index=pd.Index(['10002', '10003'], name='ID'),
     )
     pit = pd.DataFrame(
-        [{'Name': '김투수', 'Team': 'KIA'}],
-        index=pd.Index(['10001'], name='ID'),
+        [
+            {'Name': '김투수', 'Team': 'KIA', 'G': 1, 'IP': 9.0, 'WAR': 2.3},
+            {'Name': '임투수', 'Team': 'LG', 'G': 1, 'IP': 9.0, 'WAR': 1.9},
+        ],
+        index=pd.Index(['10001', '10004'], name='ID'),
     )
     games = pd.DataFrame(
         [
@@ -146,7 +172,7 @@ def test_update_info_table_marks_completed_when_cancelled_games_remain(temp_db):
     with db.connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT war_status, updated_games, total_games FROM scraper_status WHERE id = 1'
+            'SELECT war_status, updated_games, total_games, schedule_complete, source_war_ready FROM scraper_status WHERE id = 1'
         )
         status_row = cursor.fetchone()
         cursor.execute(
@@ -156,7 +182,7 @@ def test_update_info_table_marks_completed_when_cancelled_games_remain(temp_db):
         )
         game_rows = cursor.fetchall()
 
-    assert status_row == ('completed', 1, 2)
+    assert status_row == ('completed', 1, 2, 1, 1)
     assert game_rows == [
         ('LG', 'KIA', 'final', 1),
         ('SSG', '두산', 'cancelled', 0),
@@ -198,6 +224,91 @@ def test_update_info_table_marks_no_games_when_all_games_cancelled(temp_db):
     ]
 
 
+def test_update_info_table_keeps_pending_when_post_final_source_matches_previous_date(temp_db):
+    _create_scraper_tables(temp_db)
+    db = DatabaseManager(temp_db)
+    bat = pd.DataFrame(
+        [
+            {'Name': '박포수', 'Team': 'LG', 'G': 1, 'PA': 4, 'oWAR': 1.4, 'WAR': 1.4},
+            {'Name': '최타자', 'Team': 'KIA', 'G': 1, 'PA': 4, 'oWAR': 1.1, 'WAR': 1.1},
+        ],
+        index=pd.Index(['10002', '10003'], name='ID'),
+    )
+    pit = pd.DataFrame(
+        [
+            {'Name': '김투수', 'Team': 'KIA', 'G': 1, 'IP': 9.0, 'WAR': 2.3},
+            {'Name': '임투수', 'Team': 'LG', 'G': 1, 'IP': 9.0, 'WAR': 1.9},
+        ],
+        index=pd.Index(['10001', '10004'], name='ID'),
+    )
+    games = pd.DataFrame([['LG', '3 : 1', 'KIA']])
+
+    with patch('app.scraper.jobs.get_date', return_value='03/29'), patch(
+        'app.scraper.jobs.get_kst_timestamp', side_effect=[
+            '2026-03-29T23:00:00+09:00',
+            '2026-03-29T23:05:00+09:00',
+        ]
+    ):
+        _update_info_table(db, bat, pit, games)
+        _update_info_table(db, bat, pit, games)
+
+    with patch('app.scraper.jobs.get_date', return_value='03/30'), patch(
+        'app.scraper.jobs.get_kst_timestamp', return_value='2026-03-30T23:00:00+09:00'
+    ):
+        _update_info_table(db, bat, pit, games)
+
+    status_row = db.fetch_one(
+        'SELECT war_status, schedule_complete, source_war_ready FROM scraper_status WHERE id = 1'
+    )
+    assert status_row == ('pending', 1, 0)
+
+
+def test_update_info_table_keeps_pending_when_pitching_usage_does_not_advance(temp_db):
+    _create_scraper_tables(temp_db)
+    db = DatabaseManager(temp_db)
+
+    baseline_bat = pd.DataFrame(
+        [
+            {'Name': '박포수', 'Team': 'LG', 'G': 1, 'PA': 4, 'oWAR': 1.4, 'WAR': 1.4},
+            {'Name': '최타자', 'Team': 'KIA', 'G': 1, 'PA': 4, 'oWAR': 1.1, 'WAR': 1.1},
+        ],
+        index=pd.Index(['10002', '10003'], name='ID'),
+    )
+    baseline_pit = pd.DataFrame(
+        [
+            {'Name': '김투수', 'Team': 'KIA', 'G': 1, 'IP': 9.0, 'WAR': 2.3},
+            {'Name': '임투수', 'Team': 'LG', 'G': 1, 'IP': 9.0, 'WAR': 1.9},
+        ],
+        index=pd.Index(['10001', '10004'], name='ID'),
+    )
+    lagged_bat = pd.DataFrame(
+        [
+            {'Name': '박포수', 'Team': 'LG', 'G': 2, 'PA': 8, 'oWAR': 1.8, 'WAR': 1.8},
+            {'Name': '최타자', 'Team': 'KIA', 'G': 2, 'PA': 8, 'oWAR': 1.5, 'WAR': 1.5},
+        ],
+        index=pd.Index(['10002', '10003'], name='ID'),
+    )
+    lagged_pit = pd.DataFrame(
+        [
+            {'Name': '김투수', 'Team': 'KIA', 'G': 1, 'IP': 9.0, 'WAR': 2.3},
+            {'Name': '임투수', 'Team': 'LG', 'G': 1, 'IP': 9.0, 'WAR': 1.9},
+        ],
+        index=pd.Index(['10001', '10004'], name='ID'),
+    )
+    games = pd.DataFrame([['LG', '3 : 1', 'KIA']])
+
+    with patch('app.scraper.jobs.get_date', return_value='03/29'):
+        _update_info_table(db, baseline_bat, baseline_pit, games)
+
+    with patch('app.scraper.jobs.get_date', return_value='03/30'):
+        _update_info_table(db, lagged_bat, lagged_pit, games)
+
+    status_row = db.fetch_one(
+        'SELECT war_status, schedule_complete, source_war_ready FROM scraper_status WHERE id = 1'
+    )
+    assert status_row == ('pending', 1, 0)
+
+
 def test_update_info_table_can_see_uncommitted_war_rows_on_shared_connection(temp_db):
     _create_scraper_tables(temp_db)
     conn = sqlite3.connect(str(temp_db))
@@ -215,12 +326,18 @@ def test_update_info_table_can_see_uncommitted_war_rows_on_shared_connection(tem
     conn.commit()
 
     bat = pd.DataFrame(
-        [{'Name': '박포수', 'Team': 'LG'}],
-        index=pd.Index(['10002'], name='ID'),
+        [
+            {'Name': '박포수', 'Team': 'LG', 'G': 1, 'PA': 4, 'oWAR': 1.4, 'WAR': 1.4},
+            {'Name': '최타자', 'Team': 'KIA', 'G': 1, 'PA': 4, 'oWAR': 1.1, 'WAR': 1.1},
+        ],
+        index=pd.Index(['10002', '10003'], name='ID'),
     )
     pit = pd.DataFrame(
-        [{'Name': '김투수', 'Team': 'KIA'}],
-        index=pd.Index(['10001'], name='ID'),
+        [
+            {'Name': '김투수', 'Team': 'KIA', 'G': 1, 'IP': 9.0, 'WAR': 2.3},
+            {'Name': '임투수', 'Team': 'LG', 'G': 1, 'IP': 9.0, 'WAR': 1.9},
+        ],
+        index=pd.Index(['10001', '10004'], name='ID'),
     )
     games = pd.DataFrame([['LG', '3 : 1', 'KIA']])
 
@@ -240,11 +357,11 @@ def test_update_info_table_can_see_uncommitted_war_rows_on_shared_connection(tem
         _update_info_table(db, bat, pit, games, conn=conn)
 
     status_row = conn.execute(
-        'SELECT war_status, updated_games, total_games FROM scraper_status WHERE id = 1'
+        'SELECT war_status, updated_games, total_games, source_war_ready FROM scraper_status WHERE id = 1'
     ).fetchone()
     conn.close()
 
-    assert status_row == ('completed', 1, 1)
+    assert status_row == ('completed', 1, 1, 1)
 
 
 def test_update_team_war_daily_can_see_uncommitted_fa_war_on_shared_connection(temp_db):
