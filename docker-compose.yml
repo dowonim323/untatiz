@@ -1,7 +1,5 @@
 # Untatiz Docker Compose Configuration
-# 단일 컨테이너에서 Scraper + Discord Bot + Web Server 운영
-
-version: '3.8'
+# 단일 컨테이너에서 Scraper + Web Server 운영
 
 services:
   untatiz:
@@ -10,9 +8,6 @@ services:
       dockerfile: Dockerfile
     container_name: untatiz
     restart: unless-stopped
-    shm_size: "4gb"
-    tmpfs:
-      - /dev/shm:size=4g
     
     # 포트 매핑
     ports:
@@ -25,8 +20,6 @@ services:
       # 로그 (영구 저장)
       - ./log:/app/log
       - ./backup:/app/backup
-      # 그래프 이미지 (영구 저장)
-      - ./graph:/app/graph
       # 뉴스 데이터 (영구 저장)
       - ./news:/app/news
       - ./api:/app/api:ro

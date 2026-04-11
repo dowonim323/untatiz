@@ -8,12 +8,9 @@ echo "============================================"
 echo "Untatiz Docker Container Starting..."
 echo "============================================"
 
-# 환경변수 기반 설정 파일 생성 (api/*.json)
-echo "[Entrypoint] Checking environment variables..."
-
 # 디렉토리 권한 설정
 echo "[Entrypoint] Setting directory permissions..."
-chown -R untatiz:untatiz /app/db /app/log /app/api /app/backup /app/graph /app/news 2>/dev/null || true
+chown -R untatiz:untatiz /app/db /app/log /app/api /app/backup /app/news 2>/dev/null || true
 
 mkdir -p /app/log
 echo "[Entrypoint] Writing container startup marker..."
@@ -21,7 +18,7 @@ date --iso-8601=seconds > /app/log/container_start_marker
 
 # 로그 디렉토리 확인
 mkdir -p /app/log
-touch /app/log/scraper.log /app/log/discord.log /app/log/web.log
+touch /app/log/scraper.log /app/log/web.log
 chown -R untatiz:untatiz /app/log
 
 # 데이터베이스 존재 확인
@@ -32,7 +29,7 @@ fi
 # 스크립트 실행 권한 설정
 chmod +x /app/docker/scraper_loop.sh 2>/dev/null || true
 
-echo "[Entrypoint] Environment setup complete."
+echo "[Entrypoint] Startup setup complete."
 echo "============================================"
 echo "Starting supervisord..."
 echo "============================================"
