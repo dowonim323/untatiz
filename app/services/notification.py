@@ -57,7 +57,58 @@ def _get_latest_team_snapshot_dates(db: DatabaseManager, season_id: int) -> tupl
     return today_iso, previous_iso
 
 
-def generate_news(config: Optional[AppConfig] = None) -> str:
+def _get_team_snapshot_dates_for_target(
+    db: DatabaseManager,
+    season_id: int,
+    target_date: str | None,
+) -> tuple[str, str | None]:
+    if not target_date:
+        return _get_latest_team_snapshot_dates(db, season_id)
+
+    target_row = db.fetch_one(
+        "SELECT date FROM team_war_daily WHERE season_id = ? AND date = ? LIMIT 1",
+        (season_id, target_date),
+    )
+    if not target_row:
+        raise ValueError(f"No team_war_daily data available for target date {target_date}")
+
+    try:
+        completed_row = db.fetch_one(
+            """SELECT target_date
+               FROM scraper_log
+               WHERE war_status = 'completed' AND target_date = ?
+               ORDER BY id DESC
+               LIMIT 1""",
+            (target_date,),
+        )
+        if completed_row:
+            previous_completed_row = db.fetch_one(
+                """SELECT MAX(target_date)
+                   FROM scraper_log
+                   WHERE war_status = 'completed' AND target_date < ?""",
+                (target_date,),
+            )
+            previous_iso = previous_completed_row[0] if previous_completed_row else None
+            if previous_iso:
+                previous_snapshot_row = db.fetch_one(
+                    "SELECT date FROM team_war_daily WHERE season_id = ? AND date = ? LIMIT 1",
+                    (season_id, previous_iso),
+                )
+                if previous_snapshot_row:
+                    return target_date, previous_iso
+            return target_date, None
+    except Exception:
+        pass
+
+    previous_row = db.fetch_one(
+        "SELECT MAX(date) FROM team_war_daily WHERE season_id = ? AND date < ?",
+        (season_id, target_date),
+    )
+    previous_iso = previous_row[0] if previous_row else None
+    return target_date, previous_iso
+
+
+def generate_news(config: Optional[AppConfig] = None, target_date: str | None = None) -> str:
     if config is None:
         config = load_config()
     
@@ -66,7 +117,7 @@ def generate_news(config: Optional[AppConfig] = None) -> str:
     league_name = config.league_name
 
     season_id = _get_active_season_id(db)
-    today_iso, previous_iso = _get_latest_team_snapshot_dates(db, season_id)
+    today_iso, previous_iso = _get_team_snapshot_dates_for_target(db, season_id, target_date)
     today = _format_mmdd(today_iso)
     previous = _format_mmdd(previous_iso) if previous_iso else today
 
@@ -478,7 +529,7 @@ def notify_update_complete(
     # Generate and send news
     if generate_news_article:
         try:
-            news_content = generate_news(config)
+            news_content = generate_news(config, target_date=target_date)
 
             news_title = ""
             news_body = ""
