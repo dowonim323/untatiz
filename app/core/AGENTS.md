@@ -15,7 +15,6 @@
 
 ## CONVENTIONS
 - Use `DatabaseManager.connection()` for reusable DB helpers so FK enforcement stays on.
-- `db.py` still exposes legacy convenience wrappers; preserve them unless you are intentionally removing compatibility.
 - `migrate.py` is special-purpose migration code; expect explicit verification and transition logic.
 - `draft_loader.py` is the canonical place for draft slot normalization (`용타`, `용투1`, `2차1R`, etc.).
 
@@ -26,5 +25,5 @@
 - Do not invent new draft slot names when canonical ones already exist.
 
 ## NOTES
-- `migrate.py` and parts of `db.py` deliberately preserve older data shapes; prefer additive changes over sweeping cleanup here.
+- `migrate.py` preserves older data shapes; prefer additive changes over sweeping cleanup there.
 - If a change affects both `core/` and `web/services/`, keep reusable primitives here and presentation formatting in `web/services/`.
