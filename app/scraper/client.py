@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import random
 import time
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -82,72 +81,22 @@ class _MLBParkDriver:
 
 
 class StatizClient:
-    def __init__(
-        self,
-        accounts: list[dict] | None = None,
-        proxies: list[str] | None = None,
-        initial_index: int = 0,
-        rate_limiter: Optional[RequestsRateLimiter] = None,
-        rotation_count: int = 10,
-        account_usage: Optional[Dict[str, Dict[str, Any]]] = None,
-        state_dir: Optional[Path] = None,
-    ):
-        self.accounts = accounts or []
-        self.proxies = proxies or []
-        self.initial_index = initial_index
-        self.rotation_count = rotation_count
+    def __init__(self, rate_limiter: RequestsRateLimiter | None = None):
         self.rate_limiter = rate_limiter or RequestsRateLimiter()
-        self.state_dir = state_dir
-        self._account_usage = account_usage or {}
-        self._driver: Optional[_MLBParkDriver] = None
-        self._session: Optional[requests.Session] = None
-        self._request_count = 0
+        self._driver: _MLBParkDriver | None = None
+        self._session: requests.Session | None = None
 
     @classmethod
-    def from_config(
-        cls,
-        config,
-        initial_index: int = 0,
-        account_usage: Optional[Dict[str, Dict[str, Any]]] = None,
-    ) -> "StatizClient":
-        return cls(
-            accounts=[],
-            proxies=[],
-            initial_index=initial_index,
-            account_usage=account_usage,
-            state_dir=config.log_dir / "mlbpark_cache",
-        )
-
-    @classmethod
-    def from_credentials_file(
-        cls,
-        credentials_path: str,
-        initial_index: int = 0,
-        account_usage: Optional[Dict[str, Dict[str, Any]]] = None,
-    ) -> "StatizClient":
-        return cls(
-            accounts=[],
-            proxies=[],
-            initial_index=initial_index,
-            account_usage=account_usage,
-            state_dir=Path(credentials_path).resolve().parent / "mlbpark_cache",
-        )
+    def from_config(cls, config) -> "StatizClient":
+        return cls()
 
     @property
-    def driver(self) -> Optional[_MLBParkDriver]:
+    def driver(self) -> _MLBParkDriver | None:
         return self._driver
 
     @property
-    def session(self) -> Optional[requests.Session]:
+    def session(self) -> requests.Session | None:
         return self._session
-
-    @property
-    def current_pair(self) -> None:
-        return None
-
-    @property
-    def request_count(self) -> int:
-        return self._request_count
 
     @property
     def is_ready(self) -> bool:
@@ -165,10 +114,9 @@ class StatizClient:
         self._cleanup_driver()
         self._driver = self.create_driver()
         self._session = self._driver.session
-        self._request_count = 0
         return True
 
-    def rotate(self) -> bool:
+    def initialize_session(self) -> bool:
         return self._initialize_driver()
 
     def retry_current_pair(self) -> bool:
@@ -179,26 +127,8 @@ class StatizClient:
 
     def ensure_ready(self) -> bool:
         if not self.is_ready:
-            return self.rotate()
+            return self.initialize_session()
         return True
-
-    def should_rotate(self) -> bool:
-        return self._request_count >= self.rotation_count
-
-    def increment_request_count(self) -> None:
-        self._request_count += 1
-
-    def reset_request_count(self) -> None:
-        self._request_count = 0
-
-    def wait(self) -> float:
-        return self.rate_limiter.wait()
-
-    def on_success(self) -> None:
-        self.rate_limiter.on_success()
-
-    def on_error(self) -> None:
-        self.rate_limiter.on_forbidden()
 
     def _cleanup_driver(self) -> None:
         if self._driver is not None:
@@ -208,12 +138,6 @@ class StatizClient:
 
     def cleanup(self) -> None:
         self._cleanup_driver()
-
-    def get_next_rotation_index(self) -> int:
-        return self.initial_index
-
-    def get_account_usage_state(self) -> Dict[str, Dict[str, Any]]:
-        return self._account_usage
 
     def __enter__(self) -> "StatizClient":
         return self

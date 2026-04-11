@@ -6,20 +6,18 @@ from app.scraper.client import StatizClient
 
 
 def test_statiz_client_rotate_initializes_requests_driver(tmp_path: Path):
-    client = StatizClient(state_dir=tmp_path)
+    client = StatizClient()
 
-    assert client.rotate() is True
+    assert client.initialize_session() is True
     assert client.driver is not None
     assert client.session is client.driver.session
-    assert client.get_next_rotation_index() == 0
-    assert client.get_account_usage_state() == {}
 
     client.cleanup()
 
 
 def test_statiz_client_refresh_current_pair_recreates_session(tmp_path: Path):
-    client = StatizClient(state_dir=tmp_path)
-    assert client.rotate() is True
+    client = StatizClient()
+    assert client.initialize_session() is True
     first_session = client.session
 
     assert client.refresh_current_pair() is True
@@ -30,8 +28,8 @@ def test_statiz_client_refresh_current_pair_recreates_session(tmp_path: Path):
 
 
 def test_statiz_client_retry_current_pair_recreates_driver_when_cleaned_up(tmp_path: Path):
-    client = StatizClient(state_dir=tmp_path)
-    assert client.rotate() is True
+    client = StatizClient()
+    assert client.initialize_session() is True
     first_driver = client.driver
 
     client.cleanup()
@@ -45,14 +43,14 @@ def test_statiz_client_retry_current_pair_recreates_driver_when_cleaned_up(tmp_p
 
 
 def test_statiz_client_persists_player_info_cache(tmp_path: Path):
-    client = StatizClient(state_dir=tmp_path)
-    assert client.rotate() is True
+    client = StatizClient()
+    assert client.initialize_session() is True
     assert client.driver is not None
     client.driver._player_info_cache["12922"] = {"position": "SS"}
     client.cleanup()
 
-    reloaded_client = StatizClient(state_dir=tmp_path)
-    assert reloaded_client.rotate() is True
+    reloaded_client = StatizClient()
+    assert reloaded_client.initialize_session() is True
     assert reloaded_client.driver is not None
     assert reloaded_client.driver._player_info_cache == {}
     reloaded_client.cleanup()
