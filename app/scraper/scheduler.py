@@ -7,14 +7,14 @@ import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Set, Tuple
 
-import pytz
 import pandas as pd
-from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+import pytz
+from requests import RequestException
 
 from app.core.db import DatabaseManager
-from app.core.utils import get_business_year, get_date, get_time_status
+from app.core.utils import get_business_year, get_date
 from app.scraper.parsers import update_games
 
 if TYPE_CHECKING:
@@ -94,15 +94,10 @@ def load_state(state_file: Path) -> Dict:
         "mode": UpdateMode.EVERY_30MIN.value,
         "team_previous": set(),
         "request_count": 0,
-        "rotation_index": 0,
-        "account_usage": {},
         "startup_marker": None,
         "cancelled_update_business_date": None,
         "postgame_update_completed": False,
         "postgame_update_business_date": None,
-        # Legacy fields (kept for backward compatibility)
-        "time_previous": 0,
-        "update_status": 1,
     }
     
     try:
@@ -111,8 +106,8 @@ def load_state(state_file: Path) -> Dict:
                 state = json.load(f)
                 # Convert list back to set
                 state["team_previous"] = set(state.get("team_previous", []))
-                state.setdefault("rotation_index", 0)
-                state.setdefault("account_usage", {})
+                state.pop("time_previous", None)
+                state.pop("update_status", None)
                 state.setdefault("startup_marker", None)
                 state.setdefault("cancelled_update_business_date", None)
                 # Ensure mode exists (migration from old format)
@@ -144,40 +139,6 @@ def save_state_dict(state_file: Path, state: Dict) -> None:
         state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(state_file, "w") as f:
             json.dump(state_to_save, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"[State] Failed to save state file: {str(e)}")
-
-
-def save_state(
-    state_file: Path,
-    time_previous: int,
-    team_previous: Set[str],
-    update_status: int,
-    request_count: int,
-    mode: str = "hourly"
-) -> None:
-    """Save current state to file (legacy interface).
-    
-    Args:
-        state_file: Path to state JSON file
-        time_previous: Previous time status (0 or 1)
-        team_previous: Set of previously updated teams
-        update_status: Update status (0=paused, 1=active)
-        request_count: Current request count
-        mode: Update mode (hourly, every_10min, every_5min)
-    """
-    state = {
-        "mode": mode,
-        "time_previous": time_previous,
-        "team_previous": list(team_previous),
-        "update_status": update_status,
-        "request_count": request_count
-    }
-    
-    try:
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(state_file, "w") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[State] Failed to save state file: {str(e)}")
 
@@ -369,9 +330,13 @@ def check_should_update(
     current_business_date = get_date()
     year = year or get_business_year()
     base_state = {
-        **state,
-        "request_count": request_count,
+        key: value
+        for key, value in state.items()
+        if key not in {"time_previous", "update_status"}
     }
+    base_state.update({
+        "request_count": request_count,
+    })
     if base_state.get("cancelled_update_business_date") != current_business_date:
         base_state["cancelled_update_business_date"] = None
 
@@ -398,8 +363,6 @@ def check_should_update(
     new_state = {
         **base_state,
         "mode": current_mode.value,
-        "time_previous": state.get("time_previous", 0),
-        "update_status": 1 if total > 0 else 0,
     }
     
     # =================================================================
@@ -420,7 +383,7 @@ def check_should_update(
             new_state["postgame_update_completed"] = False
             new_state["postgame_update_business_date"] = None
             new_state["cancelled_update_business_date"] = None
-            print(f"[Scheduler] Mode: EVERY_30MIN -> EVERY_5MIN (games started)")
+            print("[Scheduler] Mode: EVERY_30MIN -> EVERY_5MIN (games started)")
             return False, new_state, "every_30min->every_5min: games started"
         
         new_state["postgame_update_completed"] = False
@@ -464,10 +427,10 @@ def run_update(
     Returns:
         Tuple of (success, final_war_status, transitioned_to_completed)
     """
+    from app.scraper.jobs import backup_db, update_db
+    from app.scraper.parsers import load_statiz_bat, load_statiz_pit, update_games
     from app.services.data_loader import load_data
     from app.services.war_calculator import get_war
-    from app.scraper.parsers import load_statiz_bat, load_statiz_pit, update_games
-    from app.scraper.jobs import update_db, backup_db
 
     year = year or get_business_year()
     db = DatabaseManager(db_path)
@@ -505,14 +468,15 @@ def run_update(
         final_status = final_status_row[0] if final_status_row else 'pending'
         transitioned_to_completed = previous_status == 'pending' and final_status == 'completed'
         if webhook_url and transitioned_to_completed:
-            from app.services.notification import notify_update_complete
             from app.config.settings import load_config
+            from app.services.notification import notify_update_complete
+
             config = load_config()
             notify_update_complete(webhook_url, config)
         
         return True, final_status, transitioned_to_completed
         
-    except (PlaywrightError, PlaywrightTimeoutError):
+    except RequestException:
         raise
 
     except Exception as e:
@@ -527,7 +491,6 @@ def run_update(
 __all__ = [
     # State management
     "load_state",
-    "save_state",
     "save_state_dict",
     # Status functions
     "get_war_status",

@@ -4,9 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import untatiz
+
 from app.scraper.parsers import StatizLoginRequiredError
 from app.scraper.scheduler import UpdateMode, check_should_update, load_state, save_state_dict
-import untatiz
 
 
 def test_check_should_update_skips_without_driver_when_not_check_time(temp_db):
@@ -102,7 +103,30 @@ def test_check_should_update_runs_full_update_every_5min_once_games_end(temp_db)
     assert reason == "every_5min: ready for full update"
 
 
-def test_main_rotates_client_before_scheduler_skip_decision(temp_db, tmp_path):
+def test_check_should_update_does_not_propagate_removed_legacy_state_keys(temp_db):
+    state = {
+        "mode": UpdateMode.EVERY_30MIN.value,
+        "request_count": 0,
+        "time_previous": 99,
+        "update_status": 0,
+    }
+
+    with patch("app.scraper.scheduler.should_check_now", return_value=True), patch(
+        "app.scraper.scheduler.get_team_status", return_value=(0, 0, 1)
+    ), patch("app.scraper.scheduler.get_date", return_value="2026-04-10"):
+        should_update, new_state, reason = check_should_update(
+            driver=object(),
+            state=state,
+            db_path=temp_db,
+        )
+
+    assert should_update is False
+    assert reason == "every_30min: games not started yet"
+    assert "time_previous" not in new_state
+    assert "update_status" not in new_state
+
+
+def test_main_initializes_client_before_scheduler_skip_decision(temp_db, tmp_path):
     state_file = tmp_path / "scraper_state.json"
     config = SimpleNamespace(
         db_path=temp_db,
@@ -116,18 +140,12 @@ def test_main_rotates_client_before_scheduler_skip_decision(temp_db, tmp_path):
         def __init__(self):
             self.driver = object()
             self.rate_limiter = None
-            self.rotate_calls = 0
+            self.initialize_session_calls = 0
             self.cleanup_calls = 0
 
-        def rotate(self) -> bool:
-            self.rotate_calls += 1
+        def initialize_session(self) -> bool:
+            self.initialize_session_calls += 1
             return True
-
-        def get_next_rotation_index(self) -> int:
-            return 1
-
-        def get_account_usage_state(self):
-            return {}
 
         def cleanup(self) -> None:
             self.cleanup_calls += 1
@@ -135,7 +153,6 @@ def test_main_rotates_client_before_scheduler_skip_decision(temp_db, tmp_path):
     client = DummyClient()
     loaded_state = {
         "mode": UpdateMode.EVERY_30MIN.value,
-        "rotation_index": 0,
         "request_count": 0,
     }
     skipped_state = {
@@ -156,11 +173,11 @@ def test_main_rotates_client_before_scheduler_skip_decision(temp_db, tmp_path):
         exit_code = untatiz.main()
 
     assert exit_code == 0
-    assert client.rotate_calls == 1
+    assert client.initialize_session_calls == 1
     assert client.cleanup_calls == 1
 
 
-def test_scheduler_state_round_trips_account_usage(tmp_path):
+def test_scheduler_load_state_preserves_legacy_account_usage(tmp_path):
     state_file = Path(tmp_path) / "scraper_state.json"
     original_state = {
         "mode": UpdateMode.EVERY_30MIN.value,
@@ -180,6 +197,8 @@ def test_scheduler_state_round_trips_account_usage(tmp_path):
 
     assert loaded_state["team_previous"] == {"LG"}
     assert loaded_state["account_usage"] == original_state["account_usage"]
+    assert "time_previous" not in loaded_state
+    assert "update_status" not in loaded_state
 
 
 def test_main_refreshes_expired_session_and_retries(temp_db, tmp_path):
@@ -196,12 +215,12 @@ def test_main_refreshes_expired_session_and_retries(temp_db, tmp_path):
         def __init__(self):
             self.driver = object()
             self.rate_limiter = None
-            self.rotate_calls = 0
+            self.initialize_session_calls = 0
             self.refresh_calls = 0
             self.cleanup_calls = 0
 
-        def rotate(self) -> bool:
-            self.rotate_calls += 1
+        def initialize_session(self) -> bool:
+            self.initialize_session_calls += 1
             self.driver = object()
             return True
 
@@ -209,17 +228,6 @@ def test_main_refreshes_expired_session_and_retries(temp_db, tmp_path):
             self.refresh_calls += 1
             self.driver = object()
             return True
-
-        def get_next_rotation_index(self) -> int:
-            return 1
-
-        def get_account_usage_state(self):
-            return {
-                "refresh@example.com|": {
-                    "login_count": 1,
-                    "last_login_at": "2026-04-10T12:00:00+09:00",
-                }
-            }
 
         def cleanup(self) -> None:
             self.cleanup_calls += 1
@@ -234,7 +242,6 @@ def test_main_refreshes_expired_session_and_retries(temp_db, tmp_path):
     final_state = {
         **loaded_state,
         "request_count": 1,
-        "account_usage": client.get_account_usage_state(),
     }
     call_count = {"check_should_update": 0}
 
@@ -256,8 +263,10 @@ def test_main_refreshes_expired_session_and_retries(temp_db, tmp_path):
         exit_code = untatiz.main()
 
     assert exit_code == 0
-    assert client.rotate_calls == 1
+    assert client.initialize_session_calls == 1
     assert client.refresh_calls == 1
     assert client.cleanup_calls == 1
     assert call_count["check_should_update"] == 2
-    assert save_state_mock.call_args.args[1]["account_usage"] == client.get_account_usage_state()
+    saved_state = save_state_mock.call_args.args[1]
+    assert "account_usage" not in saved_state
+    assert "rotation_index" not in saved_state

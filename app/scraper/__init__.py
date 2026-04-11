@@ -15,7 +15,6 @@ from app.scraper.jobs import (
 )
 from app.scraper.scheduler import (
     load_state,
-    save_state,
     get_war_status,
     get_team_status,
     check_should_update,
@@ -37,7 +36,6 @@ __all__ = [
     "backup_db",
     # Scheduler
     "load_state",
-    "save_state",
     "get_war_status",
     "get_team_status",
     "check_should_update",

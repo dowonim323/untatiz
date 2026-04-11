@@ -13,8 +13,9 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+from requests import RequestException
 
 from app.config.settings import load_config
 from app.core.logging import setup_logging
@@ -33,12 +34,18 @@ from app.core.utils import get_business_year, get_date
 CONTAINER_START_MARKER_FILE = Path('/app/log/container_start_marker')
 MAX_BROWSER_RECOVERY_ATTEMPTS = 3
 
+
+def _strip_legacy_rotation_state(state: dict[str, Any]) -> dict[str, Any]:
+    state.pop("rotation_index", None)
+    state.pop("account_usage", None)
+    return state
+
 def main() -> int:
     """Main entrypoint for batch scraper.
     
     Single execution model:
     1. Load state from previous run
-    2. Prepare driver (rotate if needed)
+    2. Prepare session driver
     3. Check if update is needed
     4. Execute update if needed
     5. Save state
@@ -59,7 +66,7 @@ def main() -> int:
     print(f"[Main] Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     # Load previous state
-    state = load_state(config.state_file)
+    state = _strip_legacy_rotation_state(load_state(config.state_file))
     runtime_start_marker = None
     if CONTAINER_START_MARKER_FILE.exists():
         runtime_start_marker = CONTAINER_START_MARKER_FILE.read_text(encoding='utf-8').strip() or None
@@ -67,24 +74,16 @@ def main() -> int:
     consumed_startup_marker = False
     # Create client
     try:
-        client = StatizClient.from_config(
-            config,
-            initial_index=state.get("rotation_index", 0),
-            account_usage=state.get("account_usage"),
-        )
+        client = StatizClient.from_config(config)
     except Exception as e:
         print(f"[Main] Failed to create client: {str(e)}")
         return 1
     
     try:
-        if not client.rotate():
-            state["rotation_index"] = client.get_next_rotation_index()
-            state["account_usage"] = client.get_account_usage_state()
+        if not client.initialize_session():
             print("[Error] Failed to prepare driver")
             save_state_dict(config.state_file, state)
             return 1
-
-        state["rotation_index"] = client.get_next_rotation_index()
         
         driver = client.driver
         
@@ -121,10 +120,8 @@ def main() -> int:
                         failure_state = {
                             **state,
                             "request_count": 0,
-                            "rotation_index": state["rotation_index"],
-                            "account_usage": client.get_account_usage_state(),
                         }
-                        save_state_dict(config.state_file, failure_state)
+                        save_state_dict(config.state_file, _strip_legacy_rotation_state(failure_state))
                         print("[Main] Full update failed")
                         return 1
                     elif final_status == 'no_games':
@@ -142,9 +139,7 @@ def main() -> int:
                         new_state["postgame_update_completed"] = False
                         new_state["postgame_update_business_date"] = None
 
-                new_state["rotation_index"] = state["rotation_index"]
                 new_state["startup_marker"] = state.get("startup_marker")
-                new_state["account_usage"] = client.get_account_usage_state()
                 if not should_update and not reason.startswith("skip") and reason not in {
                     "every_30min: no games today",
                     "every_30min: no games already handled",
@@ -165,27 +160,25 @@ def main() -> int:
                 if client.refresh_current_pair():
                     driver = client.driver
                     continue
-                if not client.rotate():
+                if not client.initialize_session():
                     raise
-                state["rotation_index"] = client.get_next_rotation_index()
                 driver = client.driver
                 continue
-            except (PlaywrightError, PlaywrightTimeoutError) as e:
+            except RequestException as e:
                 browser_attempt += 1
-                print(f"[Main] Browser error {browser_attempt}/{MAX_BROWSER_RECOVERY_ATTEMPTS}: {e}")
+                print(f"[Main] Request error {browser_attempt}/{MAX_BROWSER_RECOVERY_ATTEMPTS}: {e}")
                 if browser_attempt >= MAX_BROWSER_RECOVERY_ATTEMPTS:
                     raise
                 if client.retry_current_pair():
                     driver = client.driver
                     continue
-                if not client.rotate():
+                if not client.initialize_session():
                     raise
-                state["rotation_index"] = client.get_next_rotation_index()
                 driver = client.driver
                 continue
         
         # Save state
-        save_state_dict(config.state_file, new_state)
+        save_state_dict(config.state_file, _strip_legacy_rotation_state(new_state))
         
         print(f"[Main] Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         return 0
@@ -196,11 +189,9 @@ def main() -> int:
         traceback.print_exc()
         
         state["request_count"] = 0
-        state["rotation_index"] = client.get_next_rotation_index()
-        state["account_usage"] = client.get_account_usage_state()
         if not consumed_startup_marker:
             state["startup_marker"] = runtime_start_marker
-        save_state_dict(config.state_file, state)
+        save_state_dict(config.state_file, _strip_legacy_rotation_state(state))
         return 1
         
     finally:
