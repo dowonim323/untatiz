@@ -155,8 +155,29 @@ CREATE TABLE IF NOT EXISTS scraper_status (
     total_games INTEGER DEFAULT 0,
     updated_games INTEGER DEFAULT 0,
     war_status TEXT DEFAULT 'pending' CHECK (war_status IN ('pending', 'completed', 'no_games')),
+    schedule_complete INTEGER DEFAULT 0,
+    source_war_ready INTEGER DEFAULT 0,
+    publish_ready_at TEXT,
+    last_full_run_at TEXT,
+    last_full_run_status TEXT CHECK (last_full_run_status IN ('success', 'failed')),
+    last_error_message TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS source_team_snapshots (
+    run_at TEXT NOT NULL,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    target_date TEXT NOT NULL,
+    team_name TEXT NOT NULL,
+    phase TEXT NOT NULL CHECK (phase IN ('post_final')),
+    war_hash TEXT NOT NULL,
+    usage_hash TEXT NOT NULL,
+    bat_pa_total INTEGER NOT NULL,
+    pit_outs_total INTEGER NOT NULL,
+    PRIMARY KEY (run_at, team_name)
+);
+CREATE INDEX IF NOT EXISTS idx_source_team_snapshots_lookup
+    ON source_team_snapshots (season_id, target_date, phase, run_at, team_name);
 
 -- 11. 일별 경기 결과
 CREATE TABLE IF NOT EXISTS daily_games (
@@ -345,6 +366,8 @@ def ensure_runtime_db(db_path: Path, active_year: int) -> int:
             cursor.execute("ALTER TABLE war_daily ADD COLUMN bat_war REAL")
         if 'pit_war' not in war_daily_cols:
             cursor.execute("ALTER TABLE war_daily ADD COLUMN pit_war REAL")
+        _ensure_scraper_status_columns(conn)
+        _ensure_source_team_snapshots_table(conn)
         cursor.execute(
             """INSERT OR IGNORE INTO fa_config
                (season_id, roster_size, supplemental_bonus, min_pitchers, min_catchers, min_infielders, min_outfielders)
@@ -481,5 +504,46 @@ def _recreate_runtime_views(conn: sqlite3.Connection) -> None:
         JOIN fantasy_teams ft ON tw.team_id = ft.id
         WHERE tw.date = (SELECT MAX(date) FROM team_war_daily)
         ORDER BY tw.rank;
+        """
+    )
+
+
+def _ensure_scraper_status_columns(conn: sqlite3.Connection) -> None:
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(scraper_status)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+    column_defs = {
+        'schedule_complete': "ALTER TABLE scraper_status ADD COLUMN schedule_complete INTEGER DEFAULT 0",
+        'source_war_ready': "ALTER TABLE scraper_status ADD COLUMN source_war_ready INTEGER DEFAULT 0",
+        'publish_ready_at': "ALTER TABLE scraper_status ADD COLUMN publish_ready_at TEXT",
+        'last_full_run_at': "ALTER TABLE scraper_status ADD COLUMN last_full_run_at TEXT",
+        'last_full_run_status': (
+            "ALTER TABLE scraper_status ADD COLUMN last_full_run_status TEXT "
+            "CHECK (last_full_run_status IN ('success', 'failed'))"
+        ),
+        'last_error_message': "ALTER TABLE scraper_status ADD COLUMN last_error_message TEXT",
+    }
+    for column_name, statement in column_defs.items():
+        if column_name not in existing_cols:
+            cursor.execute(statement)
+
+
+def _ensure_source_team_snapshots_table(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS source_team_snapshots (
+            run_at TEXT NOT NULL,
+            season_id INTEGER NOT NULL REFERENCES seasons(id),
+            target_date TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            phase TEXT NOT NULL CHECK (phase IN ('post_final')),
+            war_hash TEXT NOT NULL,
+            usage_hash TEXT NOT NULL,
+            bat_pa_total INTEGER NOT NULL,
+            pit_outs_total INTEGER NOT NULL,
+            PRIMARY KEY (run_at, team_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_team_snapshots_lookup
+            ON source_team_snapshots (season_id, target_date, phase, run_at, team_name);
         """
     )
