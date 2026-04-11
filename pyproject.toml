@@ -10,4 +10,4 @@ line-length = 100
 select = ["E", "F", "W", "I"]
 
 [tool.ruff.isort]
-known-first-party = ["app", "web", "untatiz", "statiz_utils"]
+known-first-party = ["app", "web", "untatiz"]
