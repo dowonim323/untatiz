@@ -313,10 +313,7 @@ def update_db(
     db_path: Path,
 ) -> None:
     """Update database with latest WAR data.
-    
-    Updates both legacy tables (for backward compatibility during transition)
-    and new Long format tables.
-    
+
     Args:
         player_name: Player names DataFrame indexed by team
         player_id: Player IDs DataFrame indexed by team
